@@ -1,0 +1,2 @@
+# 使用方法
+下载Release中的Assets文件夹，解压缩并且放在一个空的Unity项目的Assets文件夹中
