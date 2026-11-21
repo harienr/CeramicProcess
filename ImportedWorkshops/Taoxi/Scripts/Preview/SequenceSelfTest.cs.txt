@@ -1,0 +1,99 @@
+using System.Collections;
+using System.IO;
+using UnityEngine;
+
+namespace PorcelainFromClay
+{
+    /// <summary>Headless smoke test for the complete interaction chain. Enabled only by -selftest.</summary>
+    public sealed class SequenceSelfTest : MonoBehaviour
+    {
+        WorkshopBootstrap boot;
+        string logPath;
+        bool failed;
+
+        public void Init(WorkshopBootstrap bootstrap)
+        {
+            boot = bootstrap;
+            logPath = Path.GetFullPath("selftest_log.txt");
+            StartCoroutine(Run());
+        }
+
+        IEnumerator Run()
+        {
+            yield return new WaitForSeconds(0.5f);
+            Log("BEGIN");
+            boot.Sequence.Begin();
+            yield return new WaitForSeconds(0.6f);
+
+            if (!TryActivate(boot.Refs.PowderTarget, "powder")) yield break;
+            yield return WaitFor(TaoxiStep.Water, 8f, "water step");
+            if (failed) yield break;
+
+            if (!TryActivate(boot.Refs.WaterTarget, "water")) yield break;
+            yield return WaitFor(TaoxiStep.Stir, 9f, "stir step");
+            if (failed) yield break;
+
+            if (!TryActivate(boot.Refs.StirTarget, "stir")) yield break;
+            yield return new WaitForSeconds(0.6f);
+            boot.Sequence.TestFinishStir();
+            yield return WaitFor(TaoxiStep.Settle, 4f, "settle step");
+            if (failed) yield break;
+
+            yield return WaitFor(TaoxiStep.Draw, 14f, "draw step");
+            if (failed) yield break;
+            if (!TryActivate(boot.Refs.GateTarget, "gate")) yield break;
+            yield return WaitFor(TaoxiStep.Collect, 18f, "collect step");
+            if (failed) yield break;
+
+            if (!TryActivate(boot.Refs.ClayTarget, "collect clay")) yield break;
+            yield return WaitFor(TaoxiStep.Done, 18f, "done");
+            if (failed) yield break;
+
+            Log("PASS");
+            File.WriteAllText(logPath, "PASS\n" + System.DateTime.Now.ToString("s"));
+            yield return new WaitForSeconds(0.5f);
+            Application.Quit(0);
+        }
+
+        bool TryActivate(Interactable target, string label)
+        {
+            if (target == null || !target.gameObject.activeInHierarchy)
+            {
+                Fail("missing or inactive target: " + label);
+                return false;
+            }
+            boot.Sequence.Activate(target);
+            Log("activated " + label);
+            return true;
+        }
+
+        IEnumerator WaitFor(TaoxiStep expected, float timeout, string label)
+        {
+            float t = 0f;
+            while (t < timeout)
+            {
+                if (boot.Sequence.Current == expected)
+                {
+                    Log("reached " + expected + " in " + t.ToString("0.0") + "s");
+                    yield break;
+                }
+                t += Time.deltaTime;
+                yield return null;
+            }
+            Fail("timeout waiting for " + expected + " (" + label + "), current=" + boot.Sequence.Current);
+        }
+
+        void Fail(string reason)
+        {
+            failed = true;
+            Log("FAIL " + reason);
+            File.WriteAllText(logPath, "FAIL " + reason + "\n" + System.DateTime.Now.ToString("s"));
+            Application.Quit(1);
+        }
+
+        void Log(string message)
+        {
+            Debug.Log("[selftest] " + message);
+        }
+    }
+}

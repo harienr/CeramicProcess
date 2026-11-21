@@ -1,0 +1,226 @@
+using UnityEditor;
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    public class CishanMaterials
+    {
+        public Material stone;
+        public Material floor;
+        public Material wood;
+        public Material woodWet;
+        public Material woodDark;
+        public Material plaster;
+        public Material powder;
+        public Material powderFine;
+        public Material clay;
+        public Material clayDry;
+        public Material slurry;
+        public Material slurryWater;
+        public Material iron;
+        public Material bamboo;
+        public Material roof;
+        public Material water;
+        public Material glow;
+        public Material dust;
+    }
+
+    /// <summary>Creates and updates the material assets used by the generated scene.</summary>
+    public static class CishanMaterialFactory
+    {
+        const string MatDir = "Assets/Cishan/Generated/Materials";
+        const string TexDir = "Assets/Cishan/Art/Textures";
+
+        public static CishanMaterials Build()
+        {
+            EnsureFolder("Assets/Cishan/Generated");
+            EnsureFolder(MatDir);
+
+            CishanMaterials m = new CishanMaterials();
+
+            m.stone = Lit("M_Stone", "Stone", Color.white, 0f, 0f, 0.06f, 1.15f, 1f);
+            m.floor = Lit("M_Floor", "Floor", Color.white, 0f, 0f, 0.02f, 1.25f, 1f);
+            m.wood = Lit("M_Wood_Dry", "Wood", Color.white, 0f, 0f, 0.05f, 0.85f, 1f);
+            m.woodWet = Lit("M_Wood_Wet", "Wood", new Color(0.94f, 0.94f, 0.93f), 0f, 0.72f, 0.02f, 0.7f, 1f);
+            m.woodDark = Lit("M_Wood_Dark", "Wood", new Color(0.72f, 0.70f, 0.66f), 0f, 0.12f, 0.05f, 0.8f, 1f);
+            m.plaster = Lit("M_Plaster", "Plaster", Color.white, 0f, 0f, 0f, 0.7f, 1f);
+            m.powder = Lit("M_Powder", "Powder", Color.white, 0f, 0f, 0.38f, 0.55f, 1f);
+            m.powderFine = Lit("M_Powder_Fine", "Powder", new Color(1.02f, 1.01f, 0.99f), 0f, 0f, 0.25f, 0.45f, 1f);
+            m.clay = Lit("M_Clay_Wet", "Clay", Color.white, 0f, 0.5f, 0.02f, 0.6f, 1f);
+            m.clayDry = Lit("M_Clay_Dry", "Clay", new Color(1.06f, 1.05f, 1.03f), 0f, 0.04f, 0.22f, 0.5f, 1f);
+            m.slurry = Lit("M_Slurry_Dry", "Slurry", Color.white, 0f, 0f, 0.18f, 0.5f, 1f);
+            m.iron = Lit("M_Iron", "Iron", Color.white, 0.72f, 0f, 0.04f, 0.9f, 1f);
+            m.bamboo = Lit("M_Bamboo", "Bamboo", Color.white, 0f, 0f, 0.05f, 0.8f, 1f);
+            m.roof = Lit("M_Roof", "Roof", Color.white, 0f, 0f, 0.08f, 1f, 1f);
+
+            m.water = Water("M_Water", "Slurry", new Color(0.70f, 0.73f, 0.71f, 1f), 0.78f,
+                0.55f, 0.30f);
+            m.slurryWater = Water("M_Slurry_Surface", "Slurry", new Color(0.82f, 0.80f, 0.75f, 1f),
+                0.95f, 0.42f, 0.22f);
+
+            m.glow = Unlit("M_WindowGlow", new Color(0.95f, 0.91f, 0.82f, 1f));
+            m.dust = Dust();
+
+            AssetDatabase.SaveAssets();
+            return m;
+        }
+
+        static Material Dust()
+        {
+            string dir = "Assets/Cishan/Generated/Textures";
+            EnsureFolder("Assets/Cishan/Generated");
+            EnsureFolder(dir);
+            string path = dir + "/T_Dust.png";
+            if (!System.IO.File.Exists(path))
+            {
+                const int n = 64;
+                Texture2D tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+                Color32[] px = new Color32[n * n];
+                for (int y = 0; y < n; y++)
+                {
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = (x + 0.5f) / n - 0.5f;
+                        float dy = (y + 0.5f) / n - 0.5f;
+                        float d = Mathf.Sqrt(dx * dx + dy * dy) * 2f;
+                        float a = Mathf.Clamp01(1f - d);
+                        a = a * a;
+                        px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                    }
+                }
+                tex.SetPixels32(px);
+                tex.Apply();
+                System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+                Object.DestroyImmediate(tex);
+                AssetDatabase.ImportAsset(path);
+            }
+
+            Shader sh = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+            if (sh == null) sh = Shader.Find("Particles/Standard Unlit");
+            Material mat = LoadOrCreate("M_Dust", null, sh);
+            if (mat == null) return null;
+            Texture2D t = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (t != null) mat.mainTexture = t;
+            if (mat.HasProperty("_TintColor"))
+                mat.SetColor("_TintColor", new Color(0.62f, 0.60f, 0.56f, 0.55f));
+            if (mat.HasProperty("_Color"))
+                mat.SetColor("_Color", new Color(0.78f, 0.76f, 0.71f, 0.5f));
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material Lit(string name, string tex, Color tint, float metallic, float wetness,
+            float dust, float bump, float tiling)
+        {
+            Material mat = LoadOrCreate(name, "Cishan/Lit");
+            if (mat == null) return null;
+
+            Texture2D albedo = LoadTex("T_" + tex + "_A.png");
+            Texture2D normal = LoadTex("T_" + tex + "_N.png");
+            if (albedo != null)
+            {
+                mat.mainTexture = albedo;
+                mat.mainTextureScale = new Vector2(tiling, tiling);
+            }
+            if (normal != null && mat.HasProperty("_BumpMap")) mat.SetTexture("_BumpMap", normal);
+
+            SetColor(mat, "_Color", tint);
+            SetFloat(mat, "_Metallic", metallic);
+            SetFloat(mat, "_Wetness", wetness);
+            SetFloat(mat, "_DustAmount", dust);
+            SetFloat(mat, "_BumpScale", bump);
+            SetFloat(mat, "_Roughness", 1f);
+            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.35f);
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material Water(string name, string tex, Color tint, float alpha, float smooth,
+            float ripple)
+        {
+            Material mat = LoadOrCreate(name, "Cishan/Water");
+            if (mat == null) return null;
+            Texture2D albedo = LoadTex("T_" + tex + "_A.png");
+            Texture2D normal = LoadTex("T_" + tex + "_N.png");
+            if (albedo != null) mat.mainTexture = albedo;
+            if (normal != null && mat.HasProperty("_NormalTex")) mat.SetTexture("_NormalTex", normal);
+            SetColor(mat, "_Color", tint);
+            SetFloat(mat, "_Alpha", alpha);
+            SetFloat(mat, "_Smoothness", smooth);
+            SetFloat(mat, "_RippleStrength", ripple);
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material Unlit(string name, Color color)
+        {
+            Shader sh = Shader.Find("Unlit/Color");
+            if (sh == null) sh = Shader.Find("Unlit/Texture");
+            Material mat = LoadOrCreate(name, null, sh);
+            if (mat == null) return null;
+            SetColor(mat, "_Color", color);
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material LoadOrCreate(string name, string shaderName, Shader forced = null)
+        {
+            string path = MatDir + "/" + name + ".mat";
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            Shader sh = forced;
+            if (sh == null && shaderName != null) sh = Shader.Find(shaderName);
+            if (sh == null) sh = Shader.Find("Standard");
+            if (sh == null)
+            {
+                Debug.LogError("[Cishan] 找不到着色器，无法创建材质 " + name);
+                return null;
+            }
+
+            // Never leave the workshop fully magenta: if a Cishan shader fails to
+            // compile, fall back to Standard and say exactly where to look.
+            if (shaderName != null && shaderName.StartsWith("Cishan/") && ShaderUtil.ShaderHasError(sh))
+            {
+                Debug.LogError("[Cishan] 着色器 " + shaderName + " 编译失败，材质 " + name +
+                               " 暂用 Standard。请查看 Console 里的 Shader error（或运行 ⑤ 诊断）。");
+                sh = Shader.Find("Standard");
+            }
+            if (mat == null)
+            {
+                mat = new Material(sh);
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            else if (mat.shader != sh && shaderName != null)
+            {
+                mat.shader = sh;
+            }
+            return mat;
+        }
+
+        static Texture2D LoadTex(string file)
+        {
+            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TexDir + "/" + file);
+            if (tex == null) Debug.LogWarning("[Cishan] 缺少贴图 " + file + "（请先运行 tools/make_unity_textures.py）");
+            return tex;
+        }
+
+        static void SetColor(Material mat, string prop, Color value)
+        {
+            if (mat.HasProperty(prop)) mat.SetColor(prop, value);
+        }
+
+        static void SetFloat(Material mat, string prop, float value)
+        {
+            if (mat.HasProperty(prop)) mat.SetFloat(prop, value);
+        }
+
+        static void EnsureFolder(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+            int slash = path.LastIndexOf('/');
+            string parent = path.Substring(0, slash);
+            string leaf = path.Substring(slash + 1);
+            EnsureFolder(parent);
+            AssetDatabase.CreateFolder(parent, leaf);
+        }
+    }
+}

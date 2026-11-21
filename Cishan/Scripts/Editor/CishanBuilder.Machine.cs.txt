@@ -1,0 +1,332 @@
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    public static partial class CishanWorkshopBuilder
+    {
+        // ------------------------------------------------------------------ wheel
+        static void BuildWheelAndAxle()
+        {
+            Transform g = Group("06_水碓", root, Vector3.zero, Vector3.zero).transform;
+
+            GameObject axleGO = Group("轮轴总成", g, WorkshopLayout.WheelCentre, Vector3.zero);
+            wheel = axleGO.AddComponent<WaterWheelDrive>();
+            wheel.maxRpm = 18f;
+            wheel.acceleration = 5f;
+            wheel.deceleration = 4f;
+            wheel.axleRoot = axleGO.transform;
+
+            // 8.65 m shaft: wheel outside, cams inside above the two beams
+            CylinderObj("轴身", axleGO.transform, 0.14f, 8.65f,
+                new Vector3(0f, 0f, -1.1f), mats.woodDark, new Vector3(90f, 0f, 0f), 18);
+
+            GameObject wheelGO = Group("轮体", axleGO.transform, Vector3.zero,
+                new Vector3(90f, 0f, 0f));
+            wheelGO.isStatic = false;
+
+            Vector2[] rim =
+            {
+                new Vector2(1.62f, -0.45f), new Vector2(1.75f, -0.45f),
+                new Vector2(1.75f, 0.45f), new Vector2(1.62f, 0.45f),
+                new Vector2(1.62f, -0.45f)
+            };
+            LatheObj("轮缘", wheelGO.transform, rim, mats.woodWet, Vector3.zero, 36, 0.8f);
+
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * 45f;
+                float rad = a * Mathf.Deg2Rad;
+                Vector3 pos = new Vector3(Mathf.Cos(rad) * 0.9f, 0f, Mathf.Sin(rad) * 0.9f);
+                BoxObj("辐条_" + i, wheelGO.transform, new Vector3(0.09f, 0.1f, 1.55f), pos,
+                    mats.woodDark, new Vector3(0f, 90f - a, 0f), 0.008f, false);
+            }
+
+            for (int i = 0; i < 16; i++)
+            {
+                float a = i * 22.5f;
+                float rad = a * Mathf.Deg2Rad;
+                Vector3 pos = new Vector3(Mathf.Cos(rad) * 1.56f, 0f, Mathf.Sin(rad) * 1.56f);
+                Quaternion rot = Quaternion.Euler(0f, 90f - a, 0f) * Quaternion.Euler(28f, 0f, 0f);
+                BoxObj("叶板_" + i, wheelGO.transform, new Vector3(0.05f, 0.78f, 0.42f), pos,
+                    mats.woodWet, rot.eulerAngles, 0.006f, false);
+            }
+
+            CylinderObj("轮毂", wheelGO.transform, 0.3f, 0.78f, new Vector3(0f, -0.39f, 0f),
+                mats.woodDark, Vector3.zero, 22);
+
+            // cams sit at world Z 2.9 / 4.4
+            Mesh camMesh = ProcMesh.Cam(0.20f, 0.30f, 0.16f);
+            MeshObj("凸轮_A", axleGO.transform, camMesh, mats.woodDark,
+                new Vector3(0f, 0f, 4.25f), Vector3.zero, Vector3.one);
+            MeshObj("凸轮_B", axleGO.transform, camMesh, mats.woodDark,
+                new Vector3(0f, 0f, 5.75f), new Vector3(0f, 0f, 180f), Vector3.one);
+        }
+
+        // ------------------------------------------------------------------ hammers
+        static void BuildHammers()
+        {
+            Transform g = Group("07_碓", root, Vector3.zero, Vector3.zero).transform;
+            float[] zs = { 2.9f, 4.4f };
+
+            for (int i = 0; i < 2; i++)
+            {
+                float z = zs[i];
+
+                // trestle
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    float pz = z + s * 0.44f;
+                    BoxObj("柱础_" + i + "_" + s, g, new Vector3(0.4f, 0.2f, 0.4f),
+                        new Vector3(9.6f, 0.1f, pz), mats.stone, Vector3.zero, 0.02f, true);
+                    BoxObj("支柱_" + i + "_" + s, g, new Vector3(0.16f, 1.0f, 0.16f),
+                        new Vector3(9.6f, 0.7f, pz), mats.wood, Vector3.zero, 0.01f, true);
+                }
+                BoxObj("横担_" + i, g, new Vector3(0.22f, 0.18f, 1.02f),
+                    new Vector3(9.6f, 1.2f, z), mats.woodDark, Vector3.zero, 0.01f, true);
+                CylinderObj("支点轴_" + i, g, 0.06f, 1.02f,
+                    new Vector3(9.6f, 1.31f, z - 0.51f), mats.woodDark,
+                    new Vector3(90f, 0f, 0f), 14);
+
+                // beam pivots about its centre
+                GameObject beam = Group("碓杆_" + i, g, new Vector3(9.6f, 1.31f, z),
+                    new Vector3(0f, 0f, WorkshopLayout.BeamRestAngle));
+                BoxObj("杆身", beam.transform, new Vector3(4.0f, 0.2f, 0.16f),
+                    new Vector3(-0.7f, 0f, 0f), mats.wood, Vector3.zero, 0.012f, true);
+                BoxObj("尾端垫木", beam.transform, new Vector3(0.34f, 0.06f, 0.22f),
+                    new Vector3(1.3f, 0.13f, 0f), mats.woodDark, Vector3.zero, 0.006f, false);
+                BoxObj("碓头木榫", beam.transform, new Vector3(0.2f, 0.16f, 0.2f),
+                    new Vector3(-2.7f, -0.02f, 0f), mats.woodDark, Vector3.zero, 0.008f, false);
+                BoxObj("碓头", beam.transform, new Vector3(0.26f, 0.34f, 0.26f),
+                    new Vector3(-2.7f, -0.31f, 0f), mats.stone, Vector3.zero, 0.02f, false);
+                BoxObj("碓头铁箍", beam.transform, new Vector3(0.3f, 0.05f, 0.3f),
+                    new Vector3(-2.7f, -0.15f, 0f), mats.iron, Vector3.zero, 0.004f, false);
+
+                // mortar
+                GameObject mortarGO = Group("碓臼_" + i, g, new Vector3(7.1f, 0f, z),
+                    new Vector3(0f, i * 19f, 0f));
+                Vector2[] bowl =
+                {
+                    new Vector2(0f, -0.3f), new Vector2(0.3f, -0.3f),
+                    new Vector2(0.4f, -0.12f), new Vector2(0.4f, 0.24f),
+                    new Vector2(0.325f, 0.24f), new Vector2(0.305f, 0f),
+                    new Vector2(0.1f, -0.06f), new Vector2(0f, -0.06f)
+                };
+                Mesh bowlMesh = ProcMesh.Lathe(bowl, 30, 0.9f);
+                MeshObj("石臼", mortarGO.transform, bowlMesh, mats.stone, Vector3.zero,
+                    Vector3.zero, Vector3.one);
+                BoxCollider bowlCollider = mortarGO.AddComponent<BoxCollider>();
+                bowlCollider.size = new Vector3(0.82f, 0.28f, 0.82f);
+                bowlCollider.center = new Vector3(0f, 0.14f, 0f);
+
+                Mesh pileMesh = ProcMesh.Pile(0.27f, 0.22f, 311 + i, 0.16f);
+                GameObject pile = MeshObj("石粉", mortarGO.transform, pileMesh, mats.powder,
+                    new Vector3(0f, -0.02f, 0f), Vector3.zero, Vector3.one);
+
+                GameObject stones = Group("净石", mortarGO.transform, new Vector3(0f, 0.03f, 0f),
+                    Vector3.zero);
+                RockObj("石_1", stones.transform, new Vector3(0.02f, 0.03f, 0.02f),
+                    new Vector3(0.16f, 0.14f, 0.15f), mats.stone);
+                RockObj("石_2", stones.transform, new Vector3(-0.09f, 0.05f, 0.06f),
+                    new Vector3(0.13f, 0.12f, 0.14f), mats.stone);
+                RockObj("石_3", stones.transform, new Vector3(0.08f, 0.06f, -0.08f),
+                    new Vector3(0.14f, 0.11f, 0.13f), mats.stone);
+                RockObj("石_4", stones.transform, new Vector3(-0.02f, 0.08f, -0.05f),
+                    new Vector3(0.11f, 0.1f, 0.12f), mats.stone);
+
+                // ladle resting on the rim
+                GameObject scoopGO = Group("木瓢", mortarGO.transform,
+                    new Vector3(0.34f, 0.3f, 0.26f), new Vector3(0f, 32f, 0f));
+                Vector2[] scoopBowl =
+                {
+                    new Vector2(0f, 0f), new Vector2(0.08f, 0f), new Vector2(0.1f, 0.05f),
+                    new Vector2(0.088f, 0.055f), new Vector2(0.07f, 0.018f), new Vector2(0f, 0.016f)
+                };
+                LatheObj("瓢斗", scoopGO.transform, scoopBowl, mats.wood, Vector3.zero, 16, 1f);
+                CylinderObj("瓢柄", scoopGO.transform, 0.018f, 0.34f, new Vector3(0f, 0.03f, 0f),
+                    mats.woodDark, new Vector3(0f, 0f, -90f), 10);
+                Mesh scoopPowderMesh = ProcMesh.Pile(0.065f, 0.05f, 407 + i, 0.2f);
+                GameObject scoopPowder = MeshObj("瓢中粉", scoopGO.transform, scoopPowderMesh,
+                    mats.powderFine, new Vector3(0f, 0.02f, 0f), Vector3.zero, Vector3.one);
+                scoopPowder.SetActive(false);
+
+                // bucket beside the mortar
+                GameObject bucketGO = Group("木桶_" + i, g,
+                    new Vector3(7.78f, 0f, z + 0.42f), Vector3.zero);
+                Vector2[] bucketProfile =
+                {
+                    new Vector2(0f, 0f), new Vector2(0.17f, 0f), new Vector2(0.19f, 0.3f),
+                    new Vector2(0.175f, 0.3f), new Vector2(0.155f, 0.035f), new Vector2(0f, 0.035f)
+                };
+                LatheObj("桶身", bucketGO.transform, bucketProfile, mats.woodWet, Vector3.zero, 20, 1f);
+                Vector2[] hoop =
+                {
+                    new Vector2(0.183f, 0f), new Vector2(0.202f, 0f),
+                    new Vector2(0.202f, 0.035f), new Vector2(0.183f, 0.035f),
+                    new Vector2(0.183f, 0f)
+                };
+                LatheObj("桶箍_1", bucketGO.transform, hoop, mats.iron,
+                    new Vector3(0f, 0.07f, 0f), 20, 1f);
+                LatheObj("桶箍_2", bucketGO.transform, hoop, mats.iron,
+                    new Vector3(0f, 0.22f, 0f), 20, 1f);
+                Mesh bucketPowderMesh = ProcMesh.Pile(0.14f, 0.06f, 503 + i, 0.15f);
+                GameObject bucketPowder = MeshObj("桶中粉", bucketGO.transform, bucketPowderMesh,
+                    mats.powderFine, new Vector3(0f, 0.03f, 0f), Vector3.zero, Vector3.one);
+                BucketFill fill = bucketGO.AddComponent<BucketFill>();
+                fill.powder = bucketPowder.transform;
+                GameObject pourAnchor = Group("倒粉点", bucketGO.transform,
+                    new Vector3(0f, 0.4f, 0f), Vector3.zero);
+
+                // dust puff, bounded
+                GameObject dustGO = new GameObject("石粉尘");
+                dustGO.transform.SetParent(mortarGO.transform, false);
+                dustGO.transform.localPosition = new Vector3(0f, 0.22f, 0f);
+                ParticleSystem ps = dustGO.AddComponent<ParticleSystem>();
+                ParticleSystem.MainModule main = ps.main;
+                main.loop = false;
+                main.playOnAwake = false;
+                main.duration = 1f;
+                main.startLifetime = 1.2f;
+                main.startSpeed = 0.22f;
+                main.startSize = 0.05f;
+                main.startColor = new Color(0.78f, 0.76f, 0.71f, 0.5f);
+                main.gravityModifier = 0.08f;
+                main.maxParticles = 20;
+                ParticleSystem.EmissionModule em = ps.emission;
+                em.enabled = false;
+                ParticleSystem.ShapeModule shape = ps.shape;
+                shape.shapeType = ParticleSystemShapeType.Cone;
+                shape.angle = 35f;
+                shape.radius = 0.18f;
+                shape.rotation = new Vector3(-90f, 0f, 0f);
+                ParticleSystemRenderer psr = dustGO.GetComponent<ParticleSystemRenderer>();
+                psr.material = mats.dust;
+                psr.renderMode = ParticleSystemRenderMode.Billboard;
+                PowderPuff puff = dustGO.AddComponent<PowderPuff>();
+                puff.system = ps;
+
+                MortarStation ms = mortarGO.AddComponent<MortarStation>();
+                ms.id = i == 0 ? "A" : "B";
+                ms.pile = pile.transform;
+                ms.pileRenderer = pile.GetComponent<Renderer>();
+                ms.stones = stones.transform;
+                ms.scoop = scoopGO.transform;
+                ms.scoopPowder = scoopPowder.transform;
+                ms.pourAnchor = pourAnchor.transform;
+                ms.bucket = fill;
+                ms.dust = puff;
+                ms.requiredStrikes = 6;
+                mortars[i] = ms;
+
+                MortarInteractable mi = mortarGO.AddComponent<MortarInteractable>();
+                mi.station = ms;
+                TriggerBox("碓臼交互", mortarGO.transform, new Vector3(0f, 0.4f, 0f),
+                    new Vector3(1.15f, 0.8f, 1.15f));
+
+                TripHammer th = beam.AddComponent<TripHammer>();
+                th.drive = wheel;
+                th.beamPivot = beam.transform;
+                th.mortar = ms;
+                th.dust = puff;
+                th.camOffsetDeg = i * 180f;
+                th.restAngle = WorkshopLayout.BeamRestAngle;
+                th.liftAngle = WorkshopLayout.BeamLiftAngle;
+                hammers[i] = th;
+                ms.hammer = th;
+            }
+
+            // safety rail between the approach and the falling heads
+            Transform rail = Group("护栏", g, Vector3.zero, Vector3.zero).transform;
+            float[] rz = { 2.4f, 3.15f, 3.9f, 4.65f, 5.4f };
+            for (int i = 0; i < rz.Length; i++)
+            {
+                BoxObj("栏柱_" + i, rail, new Vector3(0.09f, 0.9f, 0.09f),
+                    new Vector3(6.3f, 0.45f, rz[i]), mats.wood, Vector3.zero, 0.008f, true);
+            }
+            BoxObj("上横杆", rail, new Vector3(0.06f, 0.08f, 3.0f),
+                new Vector3(6.3f, 0.8f, 3.9f), mats.wood, Vector3.zero, 0.008f, true);
+            BoxObj("下横杆", rail, new Vector3(0.05f, 0.06f, 3.0f),
+                new Vector3(6.3f, 0.44f, 3.9f), mats.wood, Vector3.zero, 0.008f, true);
+
+            GameObject sign = Group("工序牌_06", rail, new Vector3(6.25f, 0.88f, 3.2f),
+                new Vector3(0f, -90f, 0f));
+            BoxObj("木牌", sign.transform, new Vector3(0.34f, 0.22f, 0.02f),
+                new Vector3(0f, 0.1f, 0f), mats.woodDark, Vector3.zero, 0.006f, false);
+            SignText(sign.transform, "06", new Vector3(0f, 0.1f, 0.015f), 0.09f,
+                Palette.Blue, 0.12f);
+        }
+
+        // ------------------------------------------------------------------ gate
+        static void BuildGate()
+        {
+            Transform g = Group("08_水闸", root, Vector3.zero, Vector3.zero).transform;
+            GameObject gateGO = Group("闸板", g, Vector3.zero, Vector3.zero);
+
+            BoxObj("闸框_西", gateGO.transform, new Vector3(0.18f, 1.6f, 0.16f),
+                new Vector3(8.95f, 0.8f, -1.8f), mats.stone, Vector3.zero, 0.02f, true);
+            BoxObj("闸框_东", gateGO.transform, new Vector3(0.18f, 1.6f, 0.16f),
+                new Vector3(8.95f, 0.8f, -0.9f), mats.stone, Vector3.zero, 0.02f, true);
+
+            GameObject board = BoxObj("闸板_木", gateGO.transform, new Vector3(0.07f, 0.9f, 0.86f),
+                new Vector3(8.95f, 0.45f, -1.35f), mats.woodWet, Vector3.zero, 0.01f, false);
+            BoxObj("闸板_铁箍", board.transform, new Vector3(0.09f, 0.06f, 0.88f),
+                new Vector3(0f, 0.28f, 0f), mats.iron, Vector3.zero, 0.004f, false);
+
+            // lift rod: the simplest confirmed-neutral way to raise a sluice board
+            CylinderObj("闸杆", board.transform, 0.03f, 0.86f, new Vector3(0f, 0.45f, 0f),
+                mats.iron, Vector3.zero, 10);
+            BoxObj("闸杆握把", board.transform, new Vector3(0.54f, 0.07f, 0.08f),
+                new Vector3(0f, 1.29f, 0f), mats.wood, Vector3.zero, 0.008f, false);
+            BoxObj("握把木套", board.transform, new Vector3(0.3f, 0.055f, 0.1f),
+                new Vector3(0f, 1.29f, 0f), mats.woodDark, Vector3.zero, 0.006f, false);
+
+            SluiceGate sg = gateGO.AddComponent<SluiceGate>();
+            sg.board = board.transform;
+            sg.lever = null;
+            sg.travel = 0.68f;
+            sg.speed = 0.8f;
+            gate = sg;
+            wheel.gate = sg;
+
+            GateInteractable gi = gateGO.AddComponent<GateInteractable>();
+            gi.gate = sg;
+            TriggerBox("水闸交互", gateGO.transform, new Vector3(8.95f, 1.25f, -1.35f),
+                new Vector3(1.2f, 1.6f, 1.1f));
+
+            BoxObj("闸前石台", g, new Vector3(1.6f, 0.12f, 1.0f), new Vector3(8.95f, 0.06f, 0f),
+                mats.stone, Vector3.zero, 0.02f, false);
+
+            GameObject sign = Group("工序牌_闸", g, new Vector3(8.4f, 1.3f, -0.9f),
+                new Vector3(0f, 0f, 0f));
+            BoxObj("木牌", sign.transform, new Vector3(0.3f, 0.2f, 0.02f), Vector3.zero,
+                mats.woodDark, Vector3.zero, 0.005f, false);
+            SignText(sign.transform, "06", new Vector3(0f, 0f, 0.015f), 0.09f,
+                Palette.Blue, 0.12f);
+            GameObject way = Group("指引_水闸", g, new Vector3(6.23f, 1.05f, 2.15f),
+                new Vector3(0f, -90f, 0f));
+            BoxObj("指引立柱", way.transform, new Vector3(0.05f, 0.34f, 0.05f),
+                new Vector3(0f, -0.1f, 0f), mats.wood, Vector3.zero, 0.005f, false);
+            BoxObj("指引木牌", way.transform, new Vector3(0.72f, 0.24f, 0.02f), Vector3.zero,
+                mats.woodDark, Vector3.zero, 0.006f, false);
+            SignText(way.transform, "06 水闸", new Vector3(0f, 0f, 0.015f), 0.1f,
+                Palette.Blue, 0.075f);
+        }
+
+        // ------------------------------------------------------------------ water
+        static void BuildWater()
+        {
+            Transform g = Group("09_水", root, Vector3.zero, Vector3.zero).transform;
+
+            GameObject upstream = PlaneObj("上游水面", g, 1.55f, 0.9f, mats.water,
+                new Vector3(8.2f, 0.3f, -1.35f), 1f);
+            GameObject pitWater = PlaneObj("轮坑水面", g, 3.6f, 1.6f, mats.water,
+                new Vector3(10.9f, 0.3f, -1.35f), 1f);
+
+            SluiceWater a = upstream.AddComponent<SluiceWater>();
+            a.gate = gate;
+            a.surface = upstream.GetComponent<Renderer>();
+            SluiceWater b = pitWater.AddComponent<SluiceWater>();
+            b.gate = gate;
+            b.surface = pitWater.GetComponent<Renderer>();
+        }
+    }
+}

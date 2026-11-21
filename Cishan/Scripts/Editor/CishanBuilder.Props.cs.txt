@@ -1,0 +1,402 @@
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    public static partial class CishanWorkshopBuilder
+    {
+        // ------------------------------------------------------------------ 04
+        static void BuildStoneArea()
+        {
+            Transform g = Group("10_碎石", root, Vector3.zero, Vector3.zero).transform;
+
+            BoxObj("石堆台", g, new Vector3(1.5f, 0.1f, 1.1f), new Vector3(1.35f, 0.05f, 1.45f),
+                mats.stone, Vector3.zero, 0.02f, true);
+
+            float[] xs = { -0.32f, -0.05f, 0.24f, 0.05f, -0.18f, 0.34f };
+            float[] zs = { -0.18f, 0.16f, -0.1f, 0.28f, 0.34f, 0.12f };
+            float[] ss = { 0.42f, 0.3f, 0.34f, 0.24f, 0.27f, 0.2f };
+            for (int i = 0; i < xs.Length; i++)
+            {
+                RockObj("原石_" + i, g, new Vector3(1.35f + xs[i], 0.06f + ss[i] * 0.35f, 1.45f + zs[i]),
+                    new Vector3(ss[i], ss[i] * 0.8f, ss[i] * 0.9f), mats.stone);
+            }
+
+            // anvil and hammer
+            BoxObj("石砧座", g, new Vector3(0.5f, 0.42f, 0.46f), new Vector3(2.5f, 0.21f, 1.2f),
+                mats.stone, Vector3.zero, 0.025f, true);
+            BoxObj("石砧", g, new Vector3(0.6f, 0.16f, 0.42f), new Vector3(2.5f, 0.5f, 1.2f),
+                mats.stone, Vector3.zero, 0.02f, true);
+            GameObject hammer = HammerTool(g, new Vector3(2.5f, 0.6f, 1.24f),
+                new Vector3(0f, 66f, 90f));
+            TriggerBox("锤交互", hammer.transform, new Vector3(0f, 0.18f, 0f),
+                new Vector3(0.6f, 0.7f, 0.6f));
+
+            Inspectable ins = hammer.AddComponent<Inspectable>();
+            ins.verb = "看锤";
+            ins.hint = "";
+            ins.range = 2.2f;
+            ins.stateTag = "铁锤 · 锻铁";
+            ins.showPendingTag = true;
+            ins.line = "铁锤 · 锤面中心发亮，边缘卷缺。落点决定石片方向，重量待核实。";
+
+            // broken fragments, small and sparse
+            for (int i = 0; i < 7; i++)
+            {
+                Vector3 p = new Vector3(2.05f + i * 0.12f, 0.02f, 1.55f + (i % 3) * 0.11f);
+                RockObj("碎石_" + i, g, p, new Vector3(0.1f, 0.05f, 0.08f), mats.stone);
+            }
+
+            Basket(g, new Vector3(3.0f, 0f, 1.55f), 0.28f, 0.32f, 3);
+            Sieve(g, new Vector3(3.25f, 0.36f, 1.1f), 0.42f, new Vector3(72f, -25f, 0f));
+        }
+
+        // ------------------------------------------------------------------ 05
+        static void BuildWashArea()
+        {
+            Transform g = Group("11_筛洗", root, Vector3.zero, Vector3.zero).transform;
+
+            BoxObj("洗石槽_底", g, new Vector3(1.7f, 0.12f, 0.7f), new Vector3(1.95f, 0.4f, 6.0f),
+                mats.stone, Vector3.zero, 0.015f, true);
+            BoxObj("洗石槽_南", g, new Vector3(1.7f, 0.5f, 0.12f), new Vector3(1.95f, 0.65f, 5.68f),
+                mats.stone, Vector3.zero, 0.015f, true);
+            BoxObj("洗石槽_北", g, new Vector3(1.7f, 0.5f, 0.12f), new Vector3(1.95f, 0.65f, 6.32f),
+                mats.stone, Vector3.zero, 0.015f, true);
+            BoxObj("洗石槽_西", g, new Vector3(0.12f, 0.5f, 0.7f), new Vector3(1.16f, 0.65f, 6.0f),
+                mats.stone, Vector3.zero, 0.015f, true);
+            BoxObj("洗石槽_东", g, new Vector3(0.12f, 0.5f, 0.7f), new Vector3(2.74f, 0.65f, 6.0f),
+                mats.stone, Vector3.zero, 0.015f, true);
+            BoxObj("洗石槽_座", g, new Vector3(1.5f, 0.36f, 0.56f), new Vector3(1.95f, 0.18f, 6.0f),
+                mats.stone, Vector3.zero, 0.02f, true);
+            PlaneObj("洗石水", g, 1.48f, 0.56f, mats.water, new Vector3(1.95f, 0.58f, 6.0f), 1f);
+
+            GameObject wet = Basket(g, new Vector3(0.72f, 0f, 5.35f), 0.26f, 0.3f, 5);
+            for (int i = 0; i < 5; i++)
+            {
+                RockObj("湿石_" + i, wet.transform,
+                    new Vector3(-0.12f + (i % 3) * 0.12f, 0.22f, -0.05f + (i / 3) * 0.12f),
+                    new Vector3(0.15f, 0.12f, 0.13f), mats.stone);
+            }
+
+            GameObject sieve = Sieve(g, new Vector3(3.05f, 0f, 6.55f), 0.5f,
+                new Vector3(66f, 8f, 0f));
+            TriggerBox("筛交互", sieve.transform, new Vector3(0f, 0.05f, 0f),
+                new Vector3(1.05f, 0.4f, 1.05f));
+            Inspectable ins = sieve.AddComponent<Inspectable>();
+            ins.verb = "看筛";
+            ins.range = 2.2f;
+            ins.stateTag = "竹筛 · 筛目待核实";
+            ins.showPendingTag = true;
+            ins.line = "竹筛 · 筛去枝叶泥沙，再以清水冲净。筛目与框材待核实。";
+        }
+
+        // ------------------------------------------------------------------ 07
+        static void BuildVats()
+        {
+            Transform g = Group("12_淘洗沉淀", root, Vector3.zero, Vector3.zero).transform;
+
+            GameObject vatA = Vat(g, "淘洗池", new Vector3(4.9f, 0f, 6.2f), mats.slurryWater, 3);
+            Vat(g, "沉淀池", new Vector3(6.35f, 0f, 6.25f), mats.slurryWater, 5);
+            Vat(g, "稠化池", new Vector3(7.8f, 0f, 6.25f), mats.clay, 7);
+
+            // rake leaning on the first vat
+            GameObject rake = Rake(g, new Vector3(5.55f, 0f, 5.72f), new Vector3(0f, 20f, 24f));
+            TriggerBox("耙交互", rake.transform, new Vector3(0f, 0.9f, 0f),
+                new Vector3(0.55f, 1.9f, 0.55f));
+            Inspectable ins = rake.AddComponent<Inspectable>();
+            ins.verb = "看耙";
+            ins.range = 2.2f;
+            ins.stateTag = "木耙 · 硬木";
+            ins.showPendingTag = true;
+            ins.line = "木耙 · 齿端磨圆，长短不一。搅洗时阻力随浆变稠，齿数待核实。";
+
+            Basket(g, new Vector3(6.0f, 0f, 5.35f), 0.3f, 0.34f, 9);
+
+            // the powder patch that appears when the student delivers the bucket
+            Mesh patch = ProcMesh.Pile(0.24f, 0.08f, 771, 0.2f);
+            GameObject powder = MeshObj("待入池石粉", vatA.transform, patch, mats.powderFine,
+                new Vector3(0f, 0.605f, 0f), Vector3.zero, Vector3.one);
+            powder.SetActive(false);
+            vatPowder = powder.transform;
+
+            VatInteractable vi = vatA.AddComponent<VatInteractable>();
+            vi.vatName = "淘洗池";
+            TriggerBox("淘洗池交互", vatA.transform, new Vector3(0f, 0.6f, 0f),
+                new Vector3(1.4f, 1.2f, 1.4f));
+        }
+
+        // ------------------------------------------------------------------ 08
+        static void BuildSieveStand()
+        {
+            Transform g = Group("13_过筛", root, Vector3.zero, Vector3.zero).transform;
+            Vector3 p = new Vector3(9.15f, 0f, 6.15f);
+
+            for (int s = -1; s <= 1; s += 2)
+            {
+                BoxObj("筛架腿_" + s, g, new Vector3(0.09f, 1.5f, 0.09f),
+                    new Vector3(p.x + s * 0.55f, 0.75f, p.z), mats.wood,
+                    new Vector3(0f, 0f, -s * 12f), 0.008f, false);
+                BoxObj("筛架脚_" + s, g, new Vector3(0.09f, 1.3f, 0.09f),
+                    new Vector3(p.x + s * 0.4f, 0.65f, p.z + 0.5f), mats.wood,
+                    new Vector3(14f, 0f, 0f), 0.008f, false);
+            }
+            BoxObj("筛架横", g, new Vector3(1.2f, 0.07f, 0.08f), new Vector3(p.x, 1.42f, p.z),
+                mats.wood, Vector3.zero, 0.006f, false);
+
+            Sieve(g, new Vector3(p.x, 1.15f, p.z + 0.1f), 0.52f, new Vector3(58f, 0f, 0f));
+            Basket(g, new Vector3(p.x + 0.4f, 0f, p.z - 0.55f), 0.26f, 0.3f, 11);
+        }
+
+        // ------------------------------------------------------------------ 09 / 10
+        static void BuildWorkArea()
+        {
+            Transform g = Group("14_制不", root, Vector3.zero, Vector3.zero).transform;
+            Vector3 c = new Vector3(4.4f, 0f, 2.55f);
+
+            BoxObj("案面", g, new Vector3(2.0f, 0.09f, 0.9f), new Vector3(c.x, 0.82f, c.z),
+                mats.wood, Vector3.zero, 0.012f, true);
+            for (int sx = -1; sx <= 1; sx += 2)
+            {
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    BoxObj("案腿_" + sx + "_" + sz, g, new Vector3(0.09f, 0.78f, 0.09f),
+                        new Vector3(c.x + sx * 0.88f, 0.39f, c.z + sz * 0.36f),
+                        mats.woodDark, Vector3.zero, 0.008f, false);
+                }
+            }
+            BoxObj("案下格", g, new Vector3(1.86f, 0.04f, 0.78f), new Vector3(c.x, 0.26f, c.z),
+                mats.wood, Vector3.zero, 0.006f, false);
+            BoxObj("案围", g, new Vector3(1.96f, 0.12f, 0.05f), new Vector3(c.x, 0.72f, c.z - 0.43f),
+                mats.wood, Vector3.zero, 0.006f, false);
+
+            // moulds and clay
+            for (int i = 0; i < 3; i++)
+            {
+                GameObject mold = Mold(g, new Vector3(c.x - 0.6f + i * 0.6f, 0.87f, c.z - 0.05f),
+                    new Vector3(0f, i * 6f, 0f), i < 2);
+                if (i == 0)
+                {
+                    CylinderObj("割泥线", g, 0.004f, 0.42f,
+                        new Vector3(c.x - 0.6f, 0.94f, c.z - 0.12f), mats.iron,
+                        new Vector3(0f, 0f, 90f), 6);
+                }
+            }
+
+            Brick(g, new Vector3(c.x + 0.4f, 0.87f, c.z + 0.22f), new Vector3(0f, 18f, 0f));
+            Brick(g, new Vector3(c.x + 0.18f, 0.87f, c.z + 0.3f), new Vector3(0f, -8f, 0f));
+
+            // clay bin
+            GameObject bin = Group("泥箱", g, new Vector3(5.85f, 0f, 1.95f), Vector3.zero);
+            BoxObj("箱体", bin.transform, new Vector3(0.7f, 0.42f, 0.55f),
+                new Vector3(0f, 0.21f, 0f), mats.wood, Vector3.zero, 0.012f, true);
+            BoxObj("箱内泥", bin.transform, new Vector3(0.58f, 0.08f, 0.44f),
+                new Vector3(0f, 0.38f, 0f), mats.clay, Vector3.zero, 0.02f, false);
+
+            GameObject stool = Group("木凳", g, new Vector3(3.55f, 0f, 1.95f), Vector3.zero);
+            BoxObj("凳面", stool.transform, new Vector3(0.42f, 0.06f, 0.3f), new Vector3(0f, 0.42f, 0f),
+                mats.wood, Vector3.zero, 0.01f, true);
+            for (int sx = -1; sx <= 1; sx += 2)
+            {
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    BoxObj("凳腿", stool.transform, new Vector3(0.05f, 0.4f, 0.05f),
+                        new Vector3(sx * 0.17f, 0.2f, sz * 0.11f), mats.woodDark,
+                        Vector3.zero, 0.006f, false);
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ drying / exit
+        static void BuildDryingArea()
+        {
+            Transform g = Group("15_晾干入仓", root, Vector3.zero, Vector3.zero).transform;
+            Vector3 c = new Vector3(1.15f, 0f, 2.35f);
+
+            for (int s = -1; s <= 1; s += 2)
+            {
+                BoxObj("晾架柱_" + s, g, new Vector3(0.08f, 1.4f, 0.08f),
+                    new Vector3(c.x + s * 0.85f, 0.7f, c.z), mats.wood,
+                    new Vector3(0f, 0f, -s * 8f), 0.006f, false);
+            }
+            float[] ys = { 0.42f, 0.78f, 1.12f };
+            for (int i = 0; i < ys.Length; i++)
+            {
+                BoxObj("晾板_" + i, g, new Vector3(1.8f, 0.03f, 0.48f),
+                    new Vector3(c.x, ys[i], c.z), mats.wood, Vector3.zero, 0.004f, false);
+                for (int k = 0; k < 3; k++)
+                {
+                    Brick(g, new Vector3(c.x - 0.55f + k * 0.55f, ys[i] + 0.04f, c.z),
+                        new Vector3(0f, k * 4f, 0f));
+                }
+            }
+
+            // stacked 不子 by the door, pointing to 11 船载
+            for (int i = 0; i < 8; i++)
+            {
+                float x = 0.62f + (i % 2) * 0.24f;
+                float z = 5.15f + (i / 2) * 0.15f;
+                float y = 0.04f + (i / 4) * 0.075f;
+                Brick(g, new Vector3(x, y, z), new Vector3(0f, (i % 3) * 7f, 0f));
+            }
+            Basket(g, new Vector3(1.35f, 0f, 6.55f), 0.3f, 0.34f, 13);
+        }
+
+        static void BuildDetails()
+        {
+            Transform g = Group("16_杂项", root, Vector3.zero, Vector3.zero).transform;
+
+            // broom at the west corner
+            GameObject broom = Group("扫帚", g, new Vector3(0.35f, 0f, 6.65f), new Vector3(0f, 15f, 12f));
+            CylinderObj("帚柄", broom.transform, 0.022f, 1.3f, Vector3.zero, mats.bamboo, Vector3.zero, 8);
+            BoxObj("帚头", broom.transform, new Vector3(0.18f, 0.3f, 0.06f),
+                new Vector3(0f, 0.05f, 0f), mats.bamboo, Vector3.zero, 0.01f, false);
+
+            // a second bucket and a wooden mallet by the stone area
+            LatheObj("木桶_散", g, new[]
+            {
+                new Vector2(0f, 0f), new Vector2(0.16f, 0f), new Vector2(0.18f, 0.28f),
+                new Vector2(0.165f, 0.28f), new Vector2(0.145f, 0.035f), new Vector2(0f, 0.035f)
+            }, mats.woodWet, new Vector3(2.95f, 0f, 2.15f), 18, 1f);
+
+            CylinderObj("木槌柄", g, 0.02f, 0.3f,
+                new Vector3(3.15f, 0.05f, 1.9f), mats.wood,
+                new Vector3(0f, 0f, 90f), 8);
+            BoxObj("木槌头", g, new Vector3(0.12f, 0.08f, 0.08f),
+                new Vector3(3.3f, 0.06f, 1.9f), mats.woodDark, Vector3.zero, 0.006f, false);
+
+            // wheel inspection point just inside the open edge
+            GameObject post = Group("水轮说明", g, new Vector3(10.9f, 0f, 0.38f), Vector3.zero);
+            Inspectable ins = post.AddComponent<Inspectable>();
+            ins.verb = "看水轮";
+            ins.range = 2.6f;
+            ins.stateTag = "水轮 · 松木";
+            ins.showPendingTag = true;
+            ins.line = "水轮 · 直径 3.5 m（待核实）。松木，受水不易腐；轮轴带动两只凸轮，一上一下。";
+            TriggerBox("水轮交互", post.transform, new Vector3(0f, 1.2f, -0.35f),
+                new Vector3(0.9f, 1.8f, 1.1f));
+        }
+
+        // ------------------------------------------------------------------ prop kit
+        static GameObject Basket(Transform parent, Vector3 pos, float r, float h, int seed)
+        {
+            GameObject go = Group("竹筐", parent, pos, new Vector3(0f, seed * 13f, 0f));
+            Vector2[] shell =
+            {
+                new Vector2(0f, 0f), new Vector2(r * 0.8f, 0f), new Vector2(r, h),
+                new Vector2(r * 0.94f, h), new Vector2(r * 0.77f, 0.05f), new Vector2(0f, 0.05f)
+            };
+            LatheObj("筐体", go.transform, shell, mats.bamboo, Vector3.zero, 18, 1f);
+            for (int i = 0; i < 3; i++)
+            {
+                float y = 0.06f + i * (h - 0.1f) / 2f;
+                LatheObj("箍_" + i, go.transform, new[]
+                {
+                    new Vector2(r * 0.94f, y), new Vector2(r * 1.005f, y),
+                    new Vector2(r * 1.005f, y + 0.025f), new Vector2(r * 0.94f, y + 0.025f),
+                    new Vector2(r * 0.94f, y)
+                }, mats.bamboo, Vector3.zero, 18, 1f);
+            }
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * 30f;
+                float rad = a * Mathf.Deg2Rad;
+                Vector3 p = new Vector3(Mathf.Cos(rad) * r * 0.9f, h * 0.5f, Mathf.Sin(rad) * r * 0.9f);
+                BoxObj("篾_" + i, go.transform, new Vector3(0.014f, h * 0.9f, 0.02f), p,
+                    mats.bamboo, new Vector3(0f, -a, 0f), 0.002f, false);
+            }
+            return go;
+        }
+
+        static GameObject Sieve(Transform parent, Vector3 pos, float r, Vector3 euler)
+        {
+            GameObject go = Group("筛", parent, pos, euler);
+            LatheObj("筛框", go.transform, new[]
+            {
+                new Vector2(r * 0.9f, 0f), new Vector2(r, 0f), new Vector2(r, 0.06f),
+                new Vector2(r * 0.9f, 0.06f), new Vector2(r * 0.9f, 0f)
+            }, mats.bamboo, Vector3.zero, 24, 1f);
+            LatheObj("筛网", go.transform, new[]
+            {
+                new Vector2(0f, 0.015f), new Vector2(r * 0.93f, 0.015f),
+                new Vector2(r * 0.93f, 0.022f), new Vector2(0f, 0.022f)
+            }, mats.iron, Vector3.zero, 24, 1f);
+            return go;
+        }
+
+        static GameObject Rake(Transform parent, Vector3 pos, Vector3 euler)
+        {
+            GameObject go = Group("木耙", parent, pos, euler);
+            CylinderObj("耙柄", go.transform, 0.028f, 1.75f, Vector3.zero, mats.wood,
+                Vector3.zero, 10);
+            BoxObj("耙头", go.transform, new Vector3(0.4f, 0.07f, 0.06f),
+                new Vector3(0f, 0.02f, 0f), mats.woodDark, Vector3.zero, 0.006f, false);
+            for (int i = 0; i < 5; i++)
+            {
+                BoxObj("耙齿_" + i, go.transform, new Vector3(0.03f, 0.1f, 0.03f),
+                    new Vector3(-0.16f + i * 0.08f, -0.04f, 0f), mats.woodDark,
+                    Vector3.zero, 0.004f, false);
+            }
+            return go;
+        }
+
+        static GameObject HammerTool(Transform parent, Vector3 pos, Vector3 euler)
+        {
+            GameObject go = Group("铁锤", parent, pos, euler);
+            CylinderObj("锤柄", go.transform, 0.021f, 0.36f, Vector3.zero, mats.wood,
+                Vector3.zero, 8);
+            BoxObj("锤头", go.transform, new Vector3(0.2f, 0.07f, 0.07f),
+                new Vector3(0f, 0.36f, 0f), mats.iron, Vector3.zero, 0.008f, false);
+            return go;
+        }
+
+        static GameObject Vat(Transform parent, string name, Vector3 pos, Material surface, int seed)
+        {
+            GameObject go = Group(name, parent, pos, new Vector3(0f, seed * 4f, 0f));
+            Vector2[] shell =
+            {
+                new Vector2(0f, 0f), new Vector2(0.46f, 0f), new Vector2(0.52f, 0.06f),
+                new Vector2(0.58f, 0.7f), new Vector2(0.5f, 0.75f), new Vector2(0.46f, 0.1f),
+                new Vector2(0f, 0.1f)
+            };
+            Mesh mesh = ProcMesh.Lathe(shell, 32, 0.8f);
+            MeshObj("池体", go.transform, mesh, mats.stone, Vector3.zero, Vector3.zero, Vector3.one);
+            BoxCollider mc = go.AddComponent<BoxCollider>();
+            mc.size = new Vector3(1.16f, 0.76f, 1.16f);
+            mc.center = new Vector3(0f, 0.38f, 0f);
+
+            LatheObj("池沿", go.transform, new[]
+            {
+                new Vector2(0.555f, 0.68f), new Vector2(0.61f, 0.68f),
+                new Vector2(0.61f, 0.77f), new Vector2(0.555f, 0.77f),
+                new Vector2(0.555f, 0.68f)
+            }, mats.stone, Vector3.zero, 32, 1f);
+
+            LatheObj("浆面", go.transform, new[]
+            {
+                new Vector2(0f, 0.6f), new Vector2(0.49f, 0.6f),
+                new Vector2(0.49f, 0.61f), new Vector2(0f, 0.61f)
+            }, surface, Vector3.zero, 32, 1f);
+            return go;
+        }
+
+        static GameObject Mold(Transform parent, Vector3 pos, Vector3 euler, bool filled)
+        {
+            GameObject go = Group("制不模", parent, pos, euler);
+            BoxObj("模框", go.transform, new Vector3(0.23f, 0.06f, 0.14f), Vector3.zero,
+                mats.woodDark, Vector3.zero, 0.006f, false);
+            if (filled)
+            {
+                BoxObj("泥坯", go.transform, new Vector3(0.205f, 0.018f, 0.115f),
+                    new Vector3(0f, 0.03f, 0f), mats.clay, Vector3.zero, 0.004f, false);
+            }
+            return go;
+        }
+
+        static GameObject Brick(Transform parent, Vector3 pos, Vector3 euler)
+        {
+            GameObject go = Group("不子", parent, pos, euler);
+            BoxObj("坯", go.transform, new Vector3(0.22f, 0.055f, 0.13f), Vector3.zero,
+                mats.clayDry, Vector3.zero, 0.008f, false);
+            return go;
+        }
+    }
+}

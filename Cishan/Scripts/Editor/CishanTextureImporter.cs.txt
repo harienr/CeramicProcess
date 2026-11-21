@@ -1,0 +1,32 @@
+using UnityEditor;
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    /// <summary>
+    /// Import rules for the generated PBR set: albedo keeps roughness in alpha,
+    /// *_N is a normal map, everything repeats and is filtered for close viewing.
+    /// </summary>
+    public class CishanTextureImporter : AssetPostprocessor
+    {
+        void OnPreprocessTexture()
+        {
+            string p = assetPath.Replace('\\', '/');
+            if (!p.Contains("/Cishan/Art/Textures/") || !p.EndsWith(".png")) return;
+
+            TextureImporter importer = (TextureImporter)assetImporter;
+            bool normal = p.EndsWith("_N.png");
+
+            importer.textureType = normal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            importer.sRGBTexture = !normal;
+            importer.alphaSource = TextureImporterAlphaSource.FromInput;
+            importer.alphaIsTransparency = false;
+            importer.wrapMode = TextureWrapMode.Repeat;
+            importer.filterMode = FilterMode.Trilinear;
+            importer.anisoLevel = 4;
+            importer.mipmapEnabled = true;
+            importer.maxTextureSize = 2048;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+        }
+    }
+}

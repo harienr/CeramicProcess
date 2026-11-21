@@ -1,0 +1,75 @@
+using System.IO;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace PorcelainFromClay.EditorTools
+{
+    public static class ProjectSetup
+    {
+        [MenuItem("瓷从泥生/初始化项目场景")]
+        public static void InitializeProject()
+        {
+            PlayerSettings.companyName = "泥与火工作室";
+            PlayerSettings.productName = "瓷从泥生";
+            PlayerSettings.defaultScreenWidth = 1600;
+            PlayerSettings.defaultScreenHeight = 900;
+            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            PlayerSettings.resizableWindow = true;
+            PlayerSettings.runInBackground = true;
+            PlayerSettings.colorSpace = ColorSpace.Linear;
+            PlayerSettings.useHDRDisplay = false;
+            PlayerSettings.visibleInBackground = true;
+
+            QualitySettings.shadows = ShadowQuality.All;
+            QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
+            QualitySettings.shadowCascades = 4;
+            QualitySettings.shadowDistance = 16f;
+            QualitySettings.antiAliasing = 4;
+            QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
+            QualitySettings.vSyncCount = 1;
+            QualitySettings.softParticles = false;
+
+            var sceneDir = "Assets/Scenes";
+            if (!Directory.Exists(sceneDir)) Directory.CreateDirectory(sceneDir);
+
+            var scenePath = "Assets/Scenes/Workshop.unity";
+            if (!File.Exists(scenePath))
+            {
+                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var go = new GameObject("WorkshopBootstrap");
+                go.AddComponent<WorkshopBootstrap>();
+                EditorSceneManager.SaveScene(scene, scenePath);
+            }
+
+            var scenes = EditorBuildSettings.scenes;
+            bool has = false;
+            foreach (var s in scenes) if (s.path == scenePath) has = true;
+            if (!has)
+            {
+                var list = new System.Collections.Generic.List<EditorBuildSettingsScene>(scenes);
+                list.Insert(0, new EditorBuildSettingsScene(scenePath, true));
+                EditorBuildSettings.scenes = list.ToArray();
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[瓷从泥生] Project initialized. Open Assets/Scenes/Workshop.unity and press Play.");
+        }
+
+        [MenuItem("瓷从泥生/打开工坊场景")]
+        public static void OpenScene()
+        {
+            if (File.Exists("Assets/Scenes/Workshop.unity"))
+            {
+                EditorSceneManager.OpenScene("Assets/Scenes/Workshop.unity");
+            }
+            else
+            {
+                InitializeProject();
+                EditorSceneManager.OpenScene("Assets/Scenes/Workshop.unity");
+            }
+        }
+    }
+}

@@ -1,0 +1,130 @@
+using System.Text;
+using UnityEditor;
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    /// <summary>One-click report for the two things that usually go wrong: shaders and camera.</summary>
+    public static class CishanDiagnostics
+    {
+        [MenuItem("瓷从泥生/舂石/⑥ 强制重编译着色器并修复材质", false, 12)]
+        public static void RecompileAndRepair()
+        {
+            string[] paths =
+            {
+                "Assets/Cishan/Shaders/CishanLit.shader",
+                "Assets/Cishan/Shaders/CishanWater.shader",
+                "Assets/Cishan/Shaders/CishanGrade.shader"
+            };
+            for (int i = 0; i < paths.Length; i++)
+            {
+                AssetDatabase.ImportAsset(paths[i], ImportAssetOptions.ForceUpdate);
+            }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+            Shader lit = Shader.Find("Cishan/Lit");
+            if (lit == null)
+            {
+                EditorUtility.DisplayDialog("修复材质", "找不到 Cishan/Lit 着色器。", "好");
+                return;
+            }
+            if (ShaderUtil.ShaderHasError(lit))
+            {
+                ShaderMessage[] msgs = ShaderUtil.GetShaderMessages(lit);
+                System.Text.StringBuilder err = new System.Text.StringBuilder();
+                for (int i = 0; i < msgs.Length && i < 6; i++)
+                {
+                    err.AppendLine(msgs[i].message + " (line " + msgs[i].line + ")");
+                }
+                Debug.LogError("[Cishan] Cishan/Lit 仍有编译错误：\n" + err);
+                EditorUtility.DisplayDialog("修复材质", "着色器仍然编译失败：\n\n" + err, "好");
+                return;
+            }
+
+            CishanMaterialFactory.Build();
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Cishan] 着色器已重新编译，材质恢复为 Cishan/Lit。" +
+                      "请再运行 ① 生成工坊场景，让相机背景与 HUD 淡入修复一起生效。");
+            EditorUtility.DisplayDialog("修复材质",
+                "着色器编译正常，材质已切回 Cishan/Lit。\n\n" +
+                "请再运行一次 ① 生成工坊场景（修相机背景与 HUD 淡入），然后 Play。", "好");
+        }
+
+        [MenuItem("瓷从泥生/舂石/⑤ 诊断材质与相机", false, 40)]
+        public static void Run()
+        {
+            StringBuilder sb = new StringBuilder(2048);
+            sb.AppendLine("《瓷从泥生》06 舂石 · 诊断");
+            sb.AppendLine("场景：" + UnityEngine.SceneManagement.SceneManager.GetActiveScene().path);
+            sb.AppendLine("渲染管线：" +
+                          (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null
+                              ? UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.name + "（本工程要求 Built-in）"
+                              : "Built-in"));
+            sb.AppendLine();
+
+            string[] names = { "Cishan/Lit", "Cishan/Water", "Cishan/Grade", "Standard" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                Shader sh = Shader.Find(names[i]);
+                if (sh == null)
+                {
+                    sb.AppendLine("[缺失] " + names[i]);
+                    continue;
+                }
+                bool err = ShaderUtil.ShaderHasError(sh);
+                sb.AppendLine((err ? "[错误] " : "[正常] ") + names[i] + "  supported=" + sh.isSupported);
+                if (err)
+                {
+                    ShaderMessage[] msgs = ShaderUtil.GetShaderMessages(sh);
+                    for (int m = 0; m < msgs.Length && m < 8; m++)
+                    {
+                        sb.AppendLine("    " + msgs[m].message + "  (line " + msgs[m].line + ")");
+                    }
+                }
+            }
+
+            sb.AppendLine();
+            Renderer[] renderers = Object.FindObjectsOfType<Renderer>();
+            int nullMat = 0;
+            int brokenMat = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Material mat = renderers[i].sharedMaterial;
+                if (mat == null)
+                {
+                    nullMat++;
+                    if (nullMat <= 6) sb.AppendLine("[无材质] " + renderers[i].name);
+                }
+                else if (mat.shader == null || ShaderUtil.ShaderHasError(mat.shader))
+                {
+                    brokenMat++;
+                    if (brokenMat <= 6)
+                    {
+                        sb.AppendLine("[材质着色器错误] " + renderers[i].name + " → " + mat.name +
+                                      " (" + (mat.shader != null ? mat.shader.name : "null") + ")");
+                    }
+                }
+            }
+            sb.AppendLine("渲染器：" + renderers.Length + "　无材质：" + nullMat + "　着色器错误：" + brokenMat);
+
+            sb.AppendLine();
+            Camera[] cams = Object.FindObjectsOfType<Camera>();
+            sb.AppendLine("相机：" + cams.Length);
+            for (int i = 0; i < cams.Length; i++)
+            {
+                Camera c = cams[i];
+                sb.AppendLine("  " + c.name + "  enabled=" + c.enabled + "  tag=" + c.tag +
+                              "  pos=" + c.transform.position.ToString("F2") + "  clear=" + c.clearFlags);
+            }
+
+            CishanHUD hud = Object.FindObjectOfType<CishanHUD>();
+            sb.AppendLine("HUD：" + (hud != null ? "有" : "缺失") +
+                          (hud != null && hud.fade != null
+                              ? "　fade alpha=" + hud.fade.color.a.ToString("F2")
+                              : ""));
+
+            Debug.Log("[Cishan] 诊断\n" + sb);
+            EditorUtility.DisplayDialog("舂石 · 诊断", sb.ToString(), "好");
+        }
+    }
+}

@@ -1,0 +1,76 @@
+using System.IO;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+namespace Cishan.EditorTools
+{
+    /// <summary>Renders two still frames from the saved scene for review.</summary>
+    public static class CishanPreview
+    {
+        [MenuItem("瓷从泥生/舂石/④ 输出预览截图", false, 30)]
+        public static void Capture()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                EditorUtility.DisplayDialog("预览", "请先退出播放模式。", "好");
+                return;
+            }
+            if (!File.Exists(CishanWorkshopBuilder.ScenePath))
+            {
+                EditorUtility.DisplayDialog("预览", "场景尚未生成。请先运行 ① 生成工坊场景。", "好");
+                return;
+            }
+
+            EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo();
+            EditorSceneManager.OpenScene(CishanWorkshopBuilder.ScenePath);
+
+            Camera cam = Object.FindObjectOfType<Camera>();
+            if (cam == null)
+            {
+                Debug.LogError("[Cishan] 场景中没有相机。");
+                return;
+            }
+
+            string root = Directory.GetParent(Application.dataPath).FullName;
+            string dir = Path.Combine(root, "Docs");
+            Directory.CreateDirectory(dir);
+
+            Shoot(cam, new Vector3(5.25f, 1.62f, 3.62f), new Vector3(8.8f, 1.05f, 3.35f),
+                Path.Combine(dir, "preview_06_observe.png"));
+            Shoot(cam, new Vector3(7.6f, 1.62f, 1.05f), new Vector3(10.7f, 1.9f, -1.15f),
+                Path.Combine(dir, "preview_06_wheel.png"));
+
+            AssetDatabase.Refresh();
+            Debug.Log("[Cishan] 预览截图已输出到 " + dir);
+            EditorUtility.RevealInFinder(Path.Combine(dir, "preview_06_observe.png"));
+        }
+
+        static void Shoot(Camera cam, Vector3 eye, Vector3 target, string path)
+        {
+            const int width = 1920;
+            const int height = 1080;
+
+            cam.transform.position = eye;
+            cam.transform.rotation = Quaternion.LookRotation(target - eye, Vector3.up);
+            cam.fieldOfView = 58f;
+
+            RenderTexture rt = new RenderTexture(width, height, 24,
+                RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            rt.antiAliasing = 4;
+            cam.targetTexture = rt;
+            cam.Render();
+
+            RenderTexture.active = rt;
+            Texture2D tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = null;
+            cam.targetTexture = null;
+
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(rt);
+            Object.DestroyImmediate(tex);
+        }
+    }
+}

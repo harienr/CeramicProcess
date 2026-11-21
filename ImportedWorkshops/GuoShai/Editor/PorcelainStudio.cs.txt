@@ -1,0 +1,476 @@
+using System.IO;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+namespace Porcelain.EditorTools
+{
+    /// <summary>
+    /// 工程设置 / 场景生成 / 参考图渲染。
+    /// 菜单：瓷从泥生/…
+    /// 命令行：Unity.exe -batchmode -projectPath . -executeMethod Porcelain.EditorTools.PorcelainStudio.SetupProject -quit
+    /// </summary>
+    public static class PorcelainStudio
+    {
+        const string ScenePath = "Assets/Scenes/GuoShai.unity";
+
+        // ---------------------------------------------------------------- 打开主场景
+        [MenuItem("瓷从泥生/〇 打开主场景（GuoShai）", false, 0)]
+        public static void LoadMainScene()
+        {
+            if (!System.IO.File.Exists(ScenePath))
+            {
+                Debug.LogError("[瓷从泥生] 找不到场景文件：" + ScenePath + "，请先执行「② 生成场景文件」");
+                return;
+            }
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            Debug.Log("[瓷从泥生] 已打开主场景：" + ScenePath +
+                      "（打开就会生成场景预览；按 Play 进入第一人称操作）");
+        }
+
+        // ---------------------------------------------------------------- 工程设置
+        [MenuItem("瓷从泥生/① 配置工程（色彩空间 / 质量）", false, 1)]
+        public static void SetupProject()
+        {
+            PlayerSettings.colorSpace = ColorSpace.Linear;
+            PlayerSettings.companyName = "瓷从泥生";
+            PlayerSettings.productName = "瓷从泥生 · 过筛";
+            PlayerSettings.defaultScreenWidth = 1600;
+            PlayerSettings.defaultScreenHeight = 900;
+            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            PlayerSettings.runInBackground = true;
+
+            QualitySettings.antiAliasing = 4;
+            QualitySettings.shadows = ShadowQuality.All;
+            QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
+            QualitySettings.shadowDistance = 26f;
+            QualitySettings.shadowCascades = 4;
+            QualitySettings.pixelLightCount = 8;
+            QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
+            QualitySettings.vSyncCount = 1;
+
+            AssetDatabase.SaveAssets();
+            CreateSceneAsset();
+            Debug.Log("[瓷从泥生] 工程配置完成，色彩空间 = " + PlayerSettings.colorSpace);
+        }
+
+        // ---------------------------------------------------------------- 场景文件
+        [MenuItem("瓷从泥生/② 生成场景文件（Assets/Scenes/GuoShai.unity）", false, 2)]
+        public static void CreateSceneAsset()
+        {
+            if (!Directory.Exists("Assets/Scenes")) Directory.CreateDirectory("Assets/Scenes");
+            AssetDatabase.Refresh();
+
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var go = new GameObject("WorkshopBootstrap");
+            go.AddComponent<WorkshopRuntime>();
+
+            // 场景里放一盏“占位”主光，方便在未运行时也能看清场景
+            var lightGo = new GameObject("BootstrapLight");
+            lightGo.transform.rotation = Quaternion.Euler(46f, 34f, 0f);
+            var l = lightGo.AddComponent<Light>();
+            l.type = LightType.Directional;
+            l.intensity = 0.6f;
+            l.color = new Color(1f, 0.97f, 0.92f);
+            l.shadows = LightShadows.None;
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            AssetDatabase.Refresh();
+            Debug.Log("[瓷从泥生] 场景已生成：" + ScenePath);
+        }
+
+        // ---------------------------------------------------------------- 编辑模式预览
+        [MenuItem("瓷从泥生/③ 在当前场景里预览（不保存）", false, 3)]
+        public static void PreviewInEditor()
+        {
+            var refs = WorkshopBuilder.Build(true);
+            if (refs.shots != null && refs.shots.Length > 0)
+            {
+                Selection.activeGameObject = refs.shots[0].gameObject;
+                SceneView.lastActiveSceneView?.AlignViewToObject(refs.shots[0].transform);
+            }
+            Debug.Log("[瓷从泥生] 已生成预览对象（DontSave：不会写进场景文件，重开场景即消失）");
+        }
+
+        // ---------------------------------------------------------------- 渲染参考图
+        [MenuItem("瓷从泥生/④ 渲染参考图（Captures/）", false, 4)]
+        public static void RenderShots()
+        {
+            var refs = WorkshopBuilder.Build(true);
+            Directory.CreateDirectory("Captures");
+            SimulateAir(refs);
+
+            var shots = refs.shots;
+            for (int i = 0; i < shots.Length; i++)
+            {
+                var cam = shots[i];
+                if (cam == null) continue;
+                string name = cam.gameObject.name.Replace("Cam_", "");
+                bool structure = name == "Structure";
+                bool fogWas = RenderSettings.fog;
+                if (structure && refs.roof != null) refs.roof.gameObject.SetActive(false);
+                // 结构视角关掉雾与阴影外的氛围，方便看清搭建关系
+                if (structure) RenderSettings.fog = false;
+
+                // 让筛台进入“正在摇筛”的可读状态，参考图才看得出工序
+                if (refs.station != null && !structure) refs.station.SetDemoProgress(0.42f);
+                if (structure && refs.station != null) refs.station.SetDemoProgress(0.28f);
+                SimulateAir(refs);
+
+                string path = "Captures/" + (i + 1).ToString("00") + "_" + name + ".png";
+                Capture(cam, path, 1600, 1000);
+                Debug.Log("[瓷从泥生] 已渲染 " + path);
+                if (structure && refs.roof != null) refs.roof.gameObject.SetActive(true);
+                RenderSettings.fog = fogWas;
+            }
+        }
+
+        static void SimulateAir(WorkshopRefs refs)
+        {
+            foreach (var ps in Object.FindObjectsOfType<ParticleSystem>())
+            {
+                var em = ps.emission;
+                bool wasEnabled = em.enabled;
+                if (!wasEnabled) em.enabled = true;
+                ps.Simulate(Time.time + 9f, true, true);
+                if (!wasEnabled) em.enabled = false;
+            }
+        }
+
+        static void Capture(Camera cam, string path, int w, int h)
+        {
+            var rt = new RenderTexture(w, h, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            rt.antiAliasing = 4;
+            rt.Create();
+
+            var prev = RenderTexture.active;
+            cam.targetTexture = rt;
+            cam.Render();
+            RenderTexture.active = rt;
+
+            var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            tex.Apply();
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+
+            RenderTexture.active = prev;
+            cam.targetTexture = null;
+            Object.DestroyImmediate(tex);
+            rt.Release();
+            Object.DestroyImmediate(rt);
+        }
+
+        // ---------------------------------------------------------------- Play 模式截图（含界面）
+        static int playFrames;
+        static string playOut;
+
+        [MenuItem("瓷从泥生/⑤ Play 模式截图（含界面）", false, 5)]
+        public static void PlayCapture()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var go = new GameObject("WorkshopBootstrap");
+            go.AddComponent<WorkshopRuntime>();
+            Directory.CreateDirectory("Captures");
+            playFrames = 0;
+            playOut = "Captures/00_PlayView.png";
+            EditorApplication.update += PlayTick;
+            EditorApplication.isPlaying = true;
+        }
+
+        static void PlayTick()
+        {
+            if (!EditorApplication.isPlaying) return;
+            playFrames++;
+            if (playFrames < 60) return;
+            playFrames = -1000000;
+            ScreenCapture.CaptureScreenshot(playOut);
+            Debug.Log("[瓷从泥生] Play 截图：" + playOut);
+            EditorApplication.delayCall += () =>
+            {
+                EditorApplication.isPlaying = false;
+                EditorApplication.Exit(0);
+            };
+        }
+
+        // ---------------------------------------------------------------- 诊断：当前打开的是哪个场景
+        public static void WhichScene()
+        {
+            var s = EditorSceneManager.GetActiveScene();
+            Debug.Log("[诊断] 当前场景 = '" + s.path + "' 场景对象数 = " + s.rootCount);
+            EditorApplication.Exit(0);
+        }
+
+        // ---------------------------------------------------------------- 诊断：打开主场景后编辑器预览是否生成
+        static int probeFrames;
+
+        public static void PreviewProbe()
+        {
+            if (!System.IO.File.Exists(ScenePath))
+            {
+                Debug.Log("[探针] 场景文件不存在");
+                EditorApplication.Exit(0);
+                return;
+            }
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            probeFrames = 0;
+            EditorApplication.update += ProbeTick;
+        }
+
+        static void ProbeTick()
+        {
+            probeFrames++;
+            if (probeFrames < 12) return;
+            EditorApplication.update -= ProbeTick;
+            var w = GameObject.Find("Workshop");
+            Debug.Log("[探针] 打开场景后 Workshop = " + (w != null) +
+                      "，子对象 = " + (w != null ? w.transform.childCount : 0) +
+                      "，相机 = " + (Camera.main != null ? Camera.main.name : "无"));
+            EditorApplication.Exit(0);
+        }
+
+        // ---------------------------------------------------------------- 自检（不进入 Play，直接驱动逻辑）        [MenuItem("瓷从泥生/⑥ 自检（构建 + 交互路径）", false, 6)]
+        public static void SelfTest()
+        {
+            try
+            {
+                RunSelfTest();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[自检] FAIL: " + e);
+            }
+            EditorApplication.Exit(0);
+        }
+
+        static void RunSelfTest()
+        {
+            var refs = WorkshopBuilder.Build(true);
+            var st = refs.station;
+            Debug.Log("[自检] build ok: station=" + (st != null) + " player=" + (refs.player != null) +
+                      " hud=" + (refs.hud != null) + " cam=" + (refs.camera != null) +
+                      " shots=" + (refs.shots != null ? refs.shots.Length : 0));
+
+            // HUD 的字体 / 面板贴图创建（中文动态字体能不能拿到）
+            if (refs.hud != null) refs.hud.SendMessage("Start", SendMessageOptions.DontRequireReceiver);
+
+            // 编辑模式下不会自动跑 Awake，这里手动补上，模拟真实启动顺序
+            if (refs.fpc != null) refs.fpc.SendMessage("Awake", SendMessageOptions.DontRequireReceiver);
+            if (refs.interactor != null) refs.interactor.SendMessage("Awake", SendMessageOptions.DontRequireReceiver);
+            if (st != null) st.SendMessage("Awake", SendMessageOptions.DontRequireReceiver);
+
+            // 互动器每帧的选靶逻辑
+            if (refs.interactor != null)
+            {
+                for (int i = 0; i < 5; i++)
+                    refs.interactor.SendMessage("Update", SendMessageOptions.DontRequireReceiver);
+                var io = refs.interactor;
+                Vector3 eye = (io.head != null ? io.head : io.transform).position;
+                Vector3 fwd = (io.head != null ? io.head : io.transform).forward;
+                Vector3 to = st.Point.position - eye;
+                Debug.Log("[自检] targets=" + io.targets.Count + " eye=" + eye.ToString("F2") +
+                          " fwd=" + fwd.ToString("F2") + " dist=" + to.magnitude.ToString("F2") +
+                          " angle=" + Vector3.Angle(fwd, to).ToString("F1") +
+                          " radius=" + st.Radius);
+                Debug.Log("[自检] interactor target=" + (io.Target != null) + " prompt=" + io.Prompt);
+            }
+
+            // 工作站：上料 → 摇筛 → 刮渣 的视觉更新路径
+            st.SetDemoProgress(0.5f);
+            Step(st, 20);
+            st.Interact(0.05f, true, true);
+            Step(st, 20);
+            Debug.Log("[自检] stage=" + st.Current + " purity=" + st.Purity01.ToString("F2") +
+                      " residue=" + st.Residue01.ToString("F2") + " basin=" + st.BasinFill.ToString("F2"));
+            st.RequestScrape();
+            Step(st, 20);
+            Debug.Log("[自检] after scrape stage=" + st.Current);
+
+            // 料缸
+            if (refs.tub != null)
+            {
+                refs.tub.SendMessage("Update", SendMessageOptions.DontRequireReceiver);
+                refs.tub.Consume(0.5f);
+                refs.tub.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+                Debug.Log("[自检] tub fill=" + refs.tub.Fill01.ToString("F2") + " prompt=" + refs.tub.Prompt);
+            }
+
+            // 玩家控制器
+            if (refs.fpc != null) refs.fpc.SendMessage("Update", SendMessageOptions.DontRequireReceiver);
+
+            ReproPlayOrder();
+
+            // 筛布诊断：材质、贴图、UV 到底有没有挂上
+            if (st != null && st.clothRenderer != null)
+            {
+                var cm = st.clothRenderer.sharedMaterial;
+                var mf = st.clothRenderer.GetComponent<MeshFilter>();
+                var uvs = (mf != null && mf.sharedMesh != null) ? mf.sharedMesh.uv : new Vector2[0];
+                Debug.Log("[筛布] mat=" + cm.name +
+                          " tex=" + (cm.GetTexture("_MainTex") == null ? "★NULL" : cm.GetTexture("_MainTex").name) +
+                          " normal=" + (cm.GetTexture("_BumpMap") == null ? "★NULL" : cm.GetTexture("_BumpMap").name) +
+                          " normalKeyword=" + cm.IsKeywordEnabled("_NORMALMAP") +
+                          " bumpScale=" + cm.GetFloat("_BumpScale").ToString("F2") +
+                          " color=" + cm.color.ToString("F2"));
+                Debug.Log("[筛布] mesh uvCount=" + uvs.Length +
+                          (uvs.Length > 0 ? " uv[0]=" + uvs[0].ToString("F2") + " uv[last]=" + uvs[uvs.Length - 1].ToString("F2") : ""));
+
+                var tex = cm.GetTexture("_MainTex") as Texture2D;
+                if (tex != null)
+                {
+                    var px = tex.GetPixels(tex.width / 2, tex.height / 2, 6, 1);
+                    string s = "";
+                    for (int i = 0; i < px.Length; i++) s += px[i].ToString("F2") + " ";
+                    Debug.Log("[筛布] tex " + tex.width + "x" + tex.height +
+                              " filter=" + tex.filterMode + " aniso=" + tex.anisoLevel +
+                              " st=" + cm.GetTextureScale("_MainTex").ToString("F2") +
+                              " px=" + s);
+                    // 织纹对比度：整张图的亮度极差
+                    var all = tex.GetPixels();
+                    float mn = 1f, mx = 0f;
+                    for (int i = 0; i < all.Length; i += 37)
+                    {
+                        float l = all[i].grayscale;
+                        if (l < mn) mn = l;
+                        if (l > mx) mx = l;
+                    }
+                    Debug.Log("[筛布] 贴图亮度范围 " + mn.ToString("F3") + " ~ " + mx.ToString("F3"));
+                }
+            }
+
+            // 材质自检：贴图有没有挂上（白花花的“木板”多半是贴图丢了）
+            var probeMats = new[] {
+                Mats.ToolWood, Mats.DarkToolWood, Mats.BeamWood, Mats.PlankWood,
+                Mats.Stone, Mats.Plaster, Mats.SieveCloth, Mats.Slurry, Mats.Rock };
+            var names = new[] { "ToolWood", "DarkToolWood", "BeamWood", "PlankWood",
+                                "Stone", "Plaster", "SieveCloth", "Slurry", "Rock" };
+            for (int i = 0; i < probeMats.Length; i++)
+            {
+                var mm = probeMats[i];
+                var txt = mm.HasProperty("_MainTex") ? mm.GetTexture("_MainTex") : null;
+                Debug.Log("[材质] " + names[i] + " shader=" + mm.shader.name +
+                          " tex=" + (txt == null ? "★NULL" : txt.name) +
+                          " color=" + mm.color.ToString("F2"));
+            }
+
+            Debug.Log("[自检] PASS");
+        }
+
+        /// <summary>
+        /// 回归测试：重现 Play 模式里的组件初始化顺序（先 AddComponent、后赋引用），
+        /// 确认第一个 LateUpdate 不会把筛框拽到原点。之前就是栽在这里。
+        /// </summary>
+        static void ReproPlayOrder()
+        {
+            var go = new GameObject("ReproStation");
+            var st = go.AddComponent<SievingStation>();          // 此刻引用为空，等同 Play 模式
+            var root = new GameObject("SieveRoot");
+            root.transform.SetParent(go.transform, false);
+            root.transform.localPosition = new Vector3(0f, 1.108f, 0f);
+            root.transform.localEulerAngles = new Vector3(7f, 0f, 0f);
+            st.sieveRoot = root.transform;                        // 晚一步才赋引用
+
+            for (int i = 0; i < 5; i++)
+                st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+
+            float y = root.transform.localPosition.y;
+            Debug.Log("[自检] 复现 Play 顺序：筛框 y = " + y.ToString("F3") +
+                      (Mathf.Abs(y - 1.108f) < 0.03f ? "  OK（没有被拽到原点）" : "  ★FAIL（筛框掉到地面）"));
+            Object.DestroyImmediate(go);
+        }
+
+        static void Step(SievingStation st, int frames)
+        {
+            for (int i = 0; i < frames; i++)
+                st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+        }
+
+        // ---------------------------------------------------------------- 动画取图（验证舀浆/摇筛的手感）
+        /// <summary>用固定步长推进交互动画，并在关键姿势上截图</summary>
+        public static void AnimProbe()
+        {
+            var refs = WorkshopBuilder.Build(true);
+            var st = refs.station;
+            var cam = refs.shots[1];                 // 操作近景（筛台）
+            Directory.CreateDirectory("Captures/Anim");
+
+            // 舀浆要单独架一台相机对着料缸和木瓢
+            var tubCamGo = new GameObject("ProbeTubCam");
+            tubCamGo.transform.position = new Vector3(-0.30f, 1.26f, -0.28f);
+            tubCamGo.transform.rotation = Quaternion.LookRotation(
+                (new Vector3(-0.86f, 0.56f, -1.08f) - tubCamGo.transform.position).normalized, Vector3.up);
+            var tubCam = tubCamGo.AddComponent<Camera>();
+            tubCam.fieldOfView = 44f;
+            tubCam.nearClipPlane = 0.03f;
+            tubCam.allowHDR = true;
+            tubCam.clearFlags = CameraClearFlags.Skybox;
+            var tpost = tubCamGo.AddComponent<PostFX>();
+            tpost.shader = Shader.Find("Porcelain/PostFX");
+            tpost.exposure = 0.93f; tpost.saturation = 0.92f; tpost.contrast = 1.07f;
+            tpost.lift = 0.020f; tpost.vignette = 0.30f; tpost.sharpen = 0.18f;
+
+            SievingStation.DebugDeltaTime = 1f / 30f;
+            st.SendMessage("Awake", SendMessageOptions.DontRequireReceiver);
+            st.SetDemoProgress(0f);
+            st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+
+            // 舀浆：0.15 / 0.35 / 0.50 / 0.65 / 0.85 五个时刻
+            float[] marks = { 0.15f, 0.35f, 0.50f, 0.65f, 0.85f };
+            int idx = 0;
+            st.PlayDip();
+            for (int frame = 0; frame < 56; frame++)
+            {
+                st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+                float k = (frame + 1) / 30f;
+                if (idx < marks.Length && k >= marks[idx])
+                {
+                    SimulateAir(refs);
+                    string path = "Captures/Anim/dip_" + (idx + 1).ToString("00") + ".png";
+                    Capture(tubCam, path, 1200, 750);
+                    Debug.Log("[动画取图] " + path + " k=" + k.ToString("F2"));
+                    idx++;
+                }
+            }
+
+            // 上料（倾倒）：先复位成空筛，再按住 E
+            st.ResetForDemo();
+            st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+            for (int frame = 0; frame < 56; frame++)
+            {
+                st.Interact(1f / 30f, frame == 0, true);
+                st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+                if (frame == 30 || frame == 40 || frame == 50)
+                {
+                    SimulateAir(refs);
+                    string path = "Captures/Anim/pour_" + (frame == 30 ? "1" : frame == 40 ? "2" : "3") + ".png";
+                    Capture(cam, path, 1200, 750);
+                    Debug.Log("[动画取图] " + path + " load=" + st.Load01.ToString("F2"));
+                }
+            }
+
+            // 摇筛
+            for (int frame = 0; frame < 40; frame++)
+            {
+                st.Interact(1f / 30f, false, true);
+                st.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+                if (frame == 10 || frame == 24)
+                {
+                    SimulateAir(refs);
+                    string path = "Captures/Anim/sieve_" + (frame == 10 ? "1" : "2") + ".png";
+                    Capture(cam, path, 1200, 750);
+                    Debug.Log("[动画取图] " + path);
+                }
+            }
+
+            SievingStation.DebugDeltaTime = 0f;
+            Debug.Log("[动画取图] 完成");
+        }
+
+        // ---------------------------------------------------------------- 一键批量（命令行）
+        public static void BatchAll()
+        {
+            SetupProject();
+            RenderShots();
+        }
+    }
+}

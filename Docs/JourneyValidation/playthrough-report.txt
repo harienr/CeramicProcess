@@ -1,0 +1,42 @@
+2026-11-21 22:20:01
+PLAYTHROUGH PASS
+FLOW PASS: 05 筛洗 → 06 舂石 → 07 淘洗（粗渣返舂并回池）→ 08 过筛入沉淀池。
+Material handoffs, duplicate scoops, work gates, invalid input and reset verified.
+PASS 05–08 left-to-right row, minimum 5 m center spacing, clear 33 m front aisle
+PASS native render scale, no dynamic resolution, full textures, 4x MSAA, settings panel
+PASS single player / camera / listener; task book pause; initially empty mortars
+PASS walkable area: 6777 connected grid cells
+PASS LoadRawStones
+PASS RinseStones
+PASS RemoveDebris
+PASS TakeCleanStones
+PASS LoadMortars
+PASS OpenGate
+PASS WatchHammers
+PASS CloseGate
+PASS ScoopPowder
+PASS CarryPowder
+PASS AddWater
+PASS Stir
+PASS RemoveCoarse
+PASS ReturnCoarse
+PASS ReopenGate
+PASS WatchRegrind
+PASS CloseRegrindGate
+PASS TakeRegroundPowder
+PASS ReturnRegroundPowder
+PASS StirAgain
+PASS TakeRoughSlurry
+PASS CarrySlurry
+PASS LoadSieve
+PASS ShakeSieve
+PASS ScrapeSieve
+PASS InspectPool
+PASS InspectPool / Complete
+PASS source buckets removed and cleared; partial powder carried; coarse powder regrind visuals; washing vat empty after collection
+05 → 06 → 07（真实返舂）→ 08 已完整运行。
+Front-approachable targets / F assist: 17
+Final pool: 0.43
+Fine residue cleared: 1.00
+Runtime errors: 0
+Duration: 28.4 s

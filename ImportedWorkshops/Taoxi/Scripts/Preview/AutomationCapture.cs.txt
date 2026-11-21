@@ -1,0 +1,126 @@
+using System.Collections;
+using System.IO;
+using UnityEngine;
+
+namespace PorcelainFromClay
+{
+    /// <summary>Only active when the player is launched with -capture. Produces review stills, never shipped gameplay.</summary>
+    public sealed class AutomationCapture : MonoBehaviour
+    {
+        WorkshopBootstrap boot;
+        string outputDir;
+        int width = 1920;
+        int height = 1080;
+
+        public void Init(WorkshopBootstrap bootstrap)
+        {
+            boot = bootstrap;
+            outputDir = Path.GetFullPath("Previews");
+            var args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "-captureDir" && i + 1 < args.Length) outputDir = Path.GetFullPath(args[i + 1]);
+                if (args[i] == "-captureW" && i + 1 < args.Length) int.TryParse(args[i + 1], out width);
+                if (args[i] == "-captureH" && i + 1 < args.Length) int.TryParse(args[i + 1], out height);
+            }
+            Directory.CreateDirectory(outputDir);
+            StartCoroutine(Run());
+        }
+
+        IEnumerator Run()
+        {
+            yield return new WaitForSeconds(0.4f);
+            Screen.SetResolution(width, height, false);
+            yield return new WaitForSeconds(0.5f);
+
+            // chapter page
+            yield return Capture("00_intro");
+
+            var seq = boot.Sequence;
+            var player = boot.Player;
+
+            // wide entry view
+            player.Movement.Teleport(new Vector3(-0.15f, 0.02f, -2.4f), 0f, 11f);
+            seq.PreviewStep(TaoxiStep.Powder, 1f);
+            boot.UI.SetHudVisible(true);
+            yield return new WaitForSeconds(0.6f);
+            yield return Capture("01_workshop_wide");
+
+            // close view of the dry charge and the upper rim
+            player.Movement.Teleport(new Vector3(-0.56f, 0.02f, -0.55f), 6f, 63f);
+            seq.PreviewStep(TaoxiStep.Powder, 1f);
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("02_powder_close");
+
+            // stirring: hands on paddle, turbid water
+            player.Movement.Teleport(new Vector3(-0.56f, 0.02f, -0.55f), 6f, 62f);
+            seq.PreviewStep(TaoxiStep.Stir, 0.72f);
+            boot.Player.Viewmodel.SetPreview(ViewTool.Paddle, 2.4f);
+            yield return new WaitForSeconds(0.5f);
+            yield return Capture("03_stir_close");
+
+            // settling: clear water, visible silt
+            player.Movement.Teleport(new Vector3(-0.56f, 0.02f, -0.55f), 6f, 62f);
+            seq.PreviewStep(TaoxiStep.Settle, 0.95f);
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("04_settle_close");
+
+            // sluice open, transfer
+            player.Movement.Teleport(new Vector3(0.18f, 0.02f, -0.55f), 24f, 48f);
+            seq.PreviewStep(TaoxiStep.Draw, 0.7f);
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("05_sluice_close");
+
+            // collection
+            player.Movement.Teleport(new Vector3(0.15f, 0.02f, -0.05f), 37f, 58f);
+            seq.PreviewStep(TaoxiStep.Collect, 0.8f);
+            boot.Player.Viewmodel.SetPreview(ViewTool.ClayScoop, 0.65f);
+            yield return new WaitForSeconds(0.5f);
+            yield return Capture("06_collect_close");
+
+            // field notes panel
+            seq.PreviewStep(TaoxiStep.Collect, 0.8f);
+            boot.UI.OpenNotes();
+            yield return new WaitForSeconds(0.4f);
+            yield return Capture("07_notes");
+            boot.UI.CloseNotes();
+            yield return new WaitForSeconds(0.25f);
+
+            // end page
+            seq.PreviewStep(TaoxiStep.Done, 1f);
+            yield return new WaitForSeconds(0.6f);
+            yield return Capture("08_end");
+
+            // isolation plates for reviewing the hand/tool rig only
+            boot.UI.gameObject.SetActive(false);
+            boot.Player.MainCamera.cullingMask = 0;
+            boot.Player.Viewmodel.SetPreview(ViewTool.Paddle, 2.1f);
+            yield return new WaitForSeconds(0.25f);
+            yield return Capture("90_hand_paddle");
+            boot.Player.Viewmodel.SetPreview(ViewTool.ClayScoop, 0.6f);
+            yield return new WaitForSeconds(0.25f);
+            yield return Capture("91_hand_scoop");
+            boot.Player.Viewmodel.SetPreview(ViewTool.WaterBucket, 0.2f);
+            yield return new WaitForSeconds(0.25f);
+            yield return Capture("92_hand_bucket");
+
+            File.WriteAllText(Path.Combine(outputDir, "capture_log.txt"), "size=" + width + "x" + height + "\n" + System.DateTime.Now.ToString("s"));
+            yield return new WaitForSeconds(0.3f);
+            Application.Quit(0);
+        }
+
+        IEnumerator Capture(string name)
+        {
+            yield return new WaitForEndOfFrame();
+            string path = Path.Combine(outputDir, name + ".png");
+            var tex = ScreenCapture.CaptureScreenshotAsTexture();
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.Destroy(tex);
+            Debug.Log("[capture] " + path + " cam=" + boot.Refs.MainCamera.transform.position + " fwd=" + boot.Refs.MainCamera.transform.forward);
+            yield return new WaitForSeconds(0.15f);
+        }
+    }
+}
+
+
+

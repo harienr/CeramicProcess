@@ -1,0 +1,384 @@
+using UnityEngine.Rendering;
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace Cishan.EditorTools
+{
+    /// <summary>
+    /// Builds the playable 06 舂石 scene from primitives and generated materials.
+    /// Menu: 瓷从泥生 / 舂石 / ① 生成工坊场景.
+    /// </summary>
+    public static partial class CishanWorkshopBuilder
+    {
+        public const string ScenePath = "Assets/Cishan/Scenes/06_ChongShi.unity";
+
+        static Transform root;
+        static CishanMaterials mats;
+        static Font bodyFont;
+        static Font titleFont;
+        static int meshSeed = 7;
+
+        static WaterWheelDrive wheel;
+        static SluiceGate gate;
+        static readonly MortarStation[] mortars = new MortarStation[2];
+        static readonly TripHammer[] hammers = new TripHammer[2];
+        static CishanHUD hud;
+        static CishanGame game;
+        static CishanAudio audio;
+        static ChongShiSequence sequence;
+        static FirstPersonController fpc;
+        static PlayerInteractor interactor;
+        static Camera playerCam;
+        static Transform vatPowder;
+
+        // ------------------------------------------------------------------ menu
+        [MenuItem("瓷从泥生/舂石/① 生成工坊场景", false, 10)]
+        public static void BuildScene()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                EditorUtility.DisplayDialog("瓷从泥生", "请先退出播放模式，再生成场景。", "好");
+                return;
+            }
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+
+            EnsureLinear();
+            mats = CishanMaterialFactory.Build();
+            if (mats == null)
+            {
+                Debug.LogError("[Cishan] 材质创建失败，已停止。");
+                return;
+            }
+
+            bodyFont = AssetDatabase.LoadAssetAtPath<Font>(
+                "Assets/Cishan/Art/Fonts/NotoSansSC-Regular.ttf");
+            titleFont = AssetDatabase.LoadAssetAtPath<Font>(
+                "Assets/Cishan/Art/Fonts/NotoSerifSC-Regular.ttf");
+
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            PlayerSettings.productName = "瓷从泥生 · 第一工坊 · 舂石";
+
+            GameObject rootGO = new GameObject("舂石_WORKSHOP");
+            root = rootGO.transform;
+
+            BuildRoom();
+            BuildExterior();
+            BuildWheelAndAxle();
+            BuildHammers();
+            BuildGate();
+            BuildWater();
+            BuildStoneArea();
+            BuildWashArea();
+            BuildVats();
+            BuildSieveStand();
+            BuildWorkArea();
+            BuildDryingArea();
+            BuildDetails();
+            BuildLighting();
+
+            BuildSystems();
+            SetupSceneLook();
+
+            if (!AssetDatabase.IsValidFolder("Assets/Cishan/Scenes"))
+            {
+                AssetDatabase.CreateFolder("Assets/Cishan", "Scenes");
+            }
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+
+            List<EditorBuildSettingsScene> list = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            if (!list.Exists(s => s.path == ScenePath))
+            {
+                list.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
+                EditorBuildSettings.scenes = list.ToArray();
+            }
+
+            AssetDatabase.SaveAssets();
+            Selection.activeGameObject = rootGO;
+            Debug.Log("[Cishan] 舂石工坊已生成：12.6 × 7.2 m，檐高 4.2 m；" +
+                      "水轮 3.5 m / 单轮双碓；场景保存于 " + ScenePath +
+                      "。按 Play 开始，操作见《学徒手册》(Tab)。");
+        }
+
+        [MenuItem("瓷从泥生/舂石/② 重新生成材质与贴图设置", false, 11)]
+        public static void RebuildMaterials()
+        {
+            mats = CishanMaterialFactory.Build();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[Cishan] 材质已重建，场景引用保持。");
+        }
+
+        static void EnsureLinear()
+        {
+            if (PlayerSettings.colorSpace != ColorSpace.Linear)
+            {
+                PlayerSettings.colorSpace = ColorSpace.Linear;
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                Debug.Log("[Cishan] 项目色彩空间已切换为 Linear（贴图会重新导入一次）。");
+            }
+        }
+
+        // ------------------------------------------------------------------ helpers
+        static GameObject Group(string name, Transform parent, Vector3 pos, Vector3 euler)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localEulerAngles = euler;
+            return go;
+        }
+
+        static GameObject MeshObj(string name, Transform parent, Mesh mesh, Material mat,
+            Vector3 pos, Vector3 euler, Vector3 scale, bool meshCollider = false, bool convex = false)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localEulerAngles = euler;
+            go.transform.localScale = scale;
+            MeshFilter mf = go.AddComponent<MeshFilter>();
+            mf.sharedMesh = mesh;
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            if (meshCollider)
+            {
+                MeshCollider mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = mesh;
+                mc.convex = convex;
+            }
+            return go;
+        }
+
+        static GameObject BoxObj(string name, Transform parent, Vector3 size, Vector3 pos,
+            Material mat, Vector3 euler, float bevel, bool collider, float uvScale = 0.62f,
+            float jitter = 0f)
+        {
+            Mesh mesh = ProcMesh.BevelBox(size, bevel, LongestAxis(size), uvScale, jitter, meshSeed++);
+            GameObject go = MeshObj(name, parent, mesh, mat, pos, euler, Vector3.one);
+            if (collider)
+            {
+                BoxCollider bc = go.AddComponent<BoxCollider>();
+                bc.size = size;
+            }
+            return go;
+        }
+
+        static GameObject BoxObj(string name, Transform parent, Vector3 size, Vector3 pos, Material mat)
+        {
+            return BoxObj(name, parent, size, pos, mat, Vector3.zero, 0.01f, false);
+        }
+
+        static GameObject LatheObj(string name, Transform parent, Vector2[] profile, Material mat,
+            Vector3 pos, int segments = 28, float uvScale = 0.9f, bool collider = false)
+        {
+            Mesh mesh = ProcMesh.Lathe(profile, segments, uvScale);
+            GameObject go = MeshObj(name, parent, mesh, mat, pos, Vector3.zero, Vector3.one);
+            if (collider)
+            {
+                MeshCollider mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = mesh;
+            }
+            return go;
+        }
+
+        static GameObject CylinderObj(string name, Transform parent, float radius, float height,
+            Vector3 pos, Material mat, Vector3 euler, int segments = 20, bool collider = false)
+        {
+            Mesh mesh = ProcMesh.Cylinder(radius, height, segments);
+            GameObject go = MeshObj(name, parent, mesh, mat, pos, euler, Vector3.one);
+            if (collider)
+            {
+                MeshCollider mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = mesh;
+                mc.convex = true;
+            }
+            return go;
+        }
+
+        static GameObject RockObj(string name, Transform parent, Vector3 pos, Vector3 size,
+            Material mat, int seedOverride = 0)
+        {
+            Mesh mesh = ProcMesh.BevelBox(size, Mathf.Min(size.x, Mathf.Min(size.y, size.z)) * 0.28f,
+                Vector3.up, 0.9f, Mathf.Min(size.x, size.y) * 0.11f,
+                seedOverride == 0 ? meshSeed++ : seedOverride);
+            Vector3 euler = new Vector3(
+                Random.Range(-18f, 18f), Random.Range(0f, 360f), Random.Range(-18f, 18f));
+            return MeshObj(name, parent, mesh, mat, pos, euler, Vector3.one);
+        }
+
+        static GameObject PlaneObj(string name, Transform parent, float width, float depth,
+            Material mat, Vector3 pos, float uvScale = 1f, bool collider = false)
+        {
+            Mesh mesh = ProcMesh.Plane(width, depth, uvScale);
+            GameObject go = MeshObj(name, parent, mesh, mat, pos, Vector3.zero, Vector3.one);
+            if (collider)
+            {
+                BoxCollider bc = go.AddComponent<BoxCollider>();
+                bc.size = new Vector3(width, 0.2f, depth);
+                bc.center = new Vector3(0f, -0.1f, 0f);
+            }
+            return go;
+        }
+
+        static GameObject TriggerBox(string name, Transform parent, Vector3 pos, Vector3 size)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            BoxCollider bc = go.AddComponent<BoxCollider>();
+            bc.size = size;
+            bc.isTrigger = true;
+            return go;
+        }
+
+        static Vector3 LongestAxis(Vector3 size)
+        {
+            if (size.x >= size.y && size.x >= size.z) return Vector3.right;
+            if (size.y >= size.z) return Vector3.up;
+            return Vector3.forward;
+        }
+
+        static void SetWet(Renderer r, float wet)
+        {
+            if (r == null) return;
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            r.GetPropertyBlock(block);
+            block.SetFloat("_Wetness", wet);
+            r.SetPropertyBlock(block);
+        }
+
+        static TextMesh SignText(Transform parent, string text, Vector3 localPos, float size,
+            Color color, float charSize = 0.045f)
+        {
+            GameObject go = new GameObject("Sign_" + text);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.AddComponent<MeshRenderer>();
+            TextMesh tm = go.AddComponent<TextMesh>();
+            tm.text = text;
+            tm.font = bodyFont;
+            tm.fontSize = 72;
+            tm.characterSize = charSize;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.color = color;
+            MeshRenderer mr = go.GetComponent<MeshRenderer>();
+            if (bodyFont != null) mr.sharedMaterial = bodyFont.material;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            return tm;
+        }
+
+        // ------------------------------------------------------------------ look
+        static void SetupSceneLook()
+        {
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogStartDistance = 9f;
+            RenderSettings.fogEndDistance = 36f;
+            RenderSettings.fogColor = Palette.Hex("D8CFBD");
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.72f, 0.70f, 0.64f);
+            RenderSettings.ambientEquatorColor = new Color(0.55f, 0.52f, 0.46f);
+            RenderSettings.ambientGroundColor = new Color(0.30f, 0.29f, 0.26f);
+            RenderSettings.ambientIntensity = 0.95f;
+            RenderSettings.reflectionIntensity = 0.55f;
+            RenderSettings.skybox = null;
+        }
+
+        // ------------------------------------------------------------------ player + systems
+        static void BuildSystems()
+        {
+            // player
+            GameObject playerGO = new GameObject("Player");
+            playerGO.transform.SetParent(root, false);
+            playerGO.transform.position = WorkshopLayout.PlayerStart;
+            playerGO.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            playerGO.layer = 2; // Ignore Raycast
+
+            CharacterController cc = playerGO.AddComponent<CharacterController>();
+            cc.height = 1.72f;
+            cc.radius = 0.28f;
+            cc.center = new Vector3(0f, 0.88f, 0f);
+            cc.slopeLimit = 45f;
+            cc.stepOffset = 0.28f;
+            cc.skinWidth = 0.02f;
+
+            GameObject head = new GameObject("Head");
+            head.transform.SetParent(playerGO.transform, false);
+            head.transform.localPosition = new Vector3(0f, WorkshopLayout.EyeHeight, 0f);
+            head.layer = 2;
+
+            playerCam = head.AddComponent<Camera>();
+            playerCam.fieldOfView = 58f;
+            playerCam.nearClipPlane = 0.045f;
+            playerCam.farClipPlane = 70f;
+            playerCam.tag = "MainCamera";
+            playerCam.clearFlags = CameraClearFlags.SolidColor;
+            playerCam.backgroundColor = Palette.Hex("E8DFCE");
+            head.AddComponent<AudioListener>();
+
+            CishanLook look = head.AddComponent<CishanLook>();
+            look.cam = playerCam;
+            CishanGrade grade = head.AddComponent<CishanGrade>();
+            grade.gradeShader = Shader.Find("Cishan/Grade");
+
+            fpc = playerGO.AddComponent<FirstPersonController>();
+            fpc.head = head.transform;
+            fpc.eyeHeight = WorkshopLayout.EyeHeight;
+            fpc.walkSpeed = 1.35f;
+
+            interactor = playerGO.AddComponent<PlayerInteractor>();
+            interactor.cam = playerCam;
+
+            // ui
+            hud = CishanHUD.Build(bodyFont, titleFont);
+
+            // systems
+            GameObject sys = new GameObject("Cishan_Systems");
+            sys.transform.SetParent(root, false);
+            audio = sys.AddComponent<CishanAudio>();
+            sequence = sys.AddComponent<ChongShiSequence>();
+            game = sys.AddComponent<CishanGame>();
+
+            audio.gate = gate;
+            audio.wheel = wheel;
+
+            game.hud = hud;
+            game.audio = audio;
+            game.sequence = sequence;
+            game.player = fpc;
+            game.interactor = interactor;
+            game.gate = gate;
+            game.wheel = wheel;
+
+            sequence.player = playerGO.transform;
+            sequence.gate = gate;
+            sequence.wheel = wheel;
+            sequence.hammers = new[] { hammers[0], hammers[1] };
+            sequence.mortars = new[] { mortars[0], mortars[1] };
+            sequence.hud = hud;
+            sequence.vatPowder = vatPowder;
+
+            interactor.hud = hud;
+            fpc.audioSourceHost = audio;
+
+            // a single realtime probe keeps wet wood and stone from reading flat
+            GameObject probeGO = new GameObject("ReflectionProbe_Bay");
+            probeGO.transform.SetParent(root, false);
+            probeGO.transform.position = new Vector3(6.2f, 1.8f, 3.6f);
+            ReflectionProbe probe = probeGO.AddComponent<ReflectionProbe>();
+            probe.mode = ReflectionProbeMode.Realtime;
+            probe.refreshMode = ReflectionProbeRefreshMode.ViaScripting;
+            probe.timeSlicingMode = ReflectionProbeTimeSlicingMode.AllFacesAtOnce;
+            probe.resolution = 128;
+            probe.size = new Vector3(12.4f, 4.2f, 7f);
+            probe.intensity = 0.55f;
+            look.probe = probe;
+        }
+    }
+}

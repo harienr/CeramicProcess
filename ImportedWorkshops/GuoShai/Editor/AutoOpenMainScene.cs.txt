@@ -1,0 +1,41 @@
+using System.IO;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+namespace Porcelain.EditorTools
+{
+    /// <summary>
+    /// 打开工程时自动进主场景。
+    /// 之前踩过的坑：Unity 默认停在 Untitled 空场景，按 Play 当然什么都没有；
+    /// 这里在编辑器第一次加载时，如果当前还是个没存过的空场景，就直接打开 GuoShai。
+    /// 只做一次（SessionState 记录），不会反复抢当前场景。
+    /// </summary>
+    [InitializeOnLoad]
+    public static class AutoOpenMainScene
+    {
+        const string ScenePath = "Assets/Scenes/GuoShai.unity";
+        const string SessionKey = "Porcelain.AutoOpenedMainScene";
+
+        static AutoOpenMainScene()
+        {
+            if (Application.isBatchMode) return;
+            EditorApplication.delayCall += TryOpen;
+        }
+
+        static void TryOpen()
+        {
+            if (SessionState.GetBool(SessionKey, false)) return;
+
+            var active = EditorSceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return;   // 已经在某个场景里，不打扰
+            if (active.isDirty) return;                       // 用户改过内容，别抢
+            if (!File.Exists(ScenePath)) return;
+
+            SessionState.SetBool(SessionKey, true);
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            Debug.Log("[瓷从泥生] 已自动打开主场景。" +
+                      "打开后编辑器里就会生成工坊预览；按 Play 进入第一人称操作。");
+        }
+    }
+}

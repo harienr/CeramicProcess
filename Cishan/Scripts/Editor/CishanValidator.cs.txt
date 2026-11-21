@@ -1,0 +1,137 @@
+using System.Collections.Generic;
+using System.IO;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+namespace Cishan.EditorTools
+{
+    /// <summary>Checks the generated scene against the art bible's acceptance list.</summary>
+    public static class CishanValidator
+    {
+        [MenuItem("瓷从泥生/舂石/③ 校验场景与美术规范", false, 20)]
+        public static void Validate()
+        {
+            if (!File.Exists(CishanWorkshopBuilder.ScenePath))
+            {
+                EditorUtility.DisplayDialog("校验", "场景尚未生成。请先运行 ① 生成工坊场景。", "好");
+                return;
+            }
+
+            Scene scene = SceneManager.GetActiveScene();
+            if (scene.path != CishanWorkshopBuilder.ScenePath)
+            {
+                scene = EditorSceneManager.OpenScene(CishanWorkshopBuilder.ScenePath);
+            }
+
+            List<string> errors = new List<string>();
+            List<string> warnings = new List<string>();
+
+            CishanGame game = Object.FindObjectOfType<CishanGame>();
+            CishanHUD hud = Object.FindObjectOfType<CishanHUD>();
+            FirstPersonController fpc = Object.FindObjectOfType<FirstPersonController>();
+            Camera cam = Object.FindObjectOfType<Camera>();
+            SluiceGate gate = Object.FindObjectOfType<SluiceGate>();
+            WaterWheelDrive wheel = Object.FindObjectOfType<WaterWheelDrive>();
+            TripHammer[] hammers = Object.FindObjectsOfType<TripHammer>();
+            MortarStation[] mortars = Object.FindObjectsOfType<MortarStation>();
+
+            if (game == null) errors.Add("缺少 CishanGame（系统根）。");
+            if (hud == null) errors.Add("缺少 CishanHUD（界面）。");
+            if (fpc == null) errors.Add("缺少 FirstPersonController。");
+            if (cam == null) errors.Add("缺少相机。");
+            if (gate == null) errors.Add("缺少 SluiceGate。");
+            if (wheel == null) errors.Add("缺少 WaterWheelDrive。");
+            if (hammers.Length != 2) errors.Add("碓杆数量 = " + hammers.Length + "，应为 2（单轮双碓）。");
+            if (mortars.Length != 2) errors.Add("碓臼数量 = " + mortars.Length + "，应为 2。");
+
+            if (game != null)
+            {
+                if (game.sequence == null) errors.Add("CishanGame 未指向 ChongShiSequence。");
+                if (game.hud == null) errors.Add("CishanGame 未指向 CishanHUD。");
+                if (game.audio == null) warnings.Add("CishanGame 未指向 CishanAudio。");
+            }
+            if (wheel != null && gate != null && wheel.gate != gate)
+                errors.Add("WaterWheelDrive.gate 未连接水闸。");
+
+            for (int i = 0; i < hammers.Length; i++)
+            {
+                if (hammers[i].drive == null) errors.Add("碓杆 " + i + " 没有水轮引用。");
+                if (hammers[i].mortar == null) errors.Add("碓杆 " + i + " 没有碓臼引用。");
+                if (hammers[i].beamPivot == null) errors.Add("碓杆 " + i + " 没有支点。");
+            }
+            for (int i = 0; i < mortars.Length; i++)
+            {
+                if (mortars[i].hammer == null) errors.Add("碓臼 " + i + " 没有碓杆引用。");
+                if (mortars[i].pile == null) errors.Add("碓臼 " + i + " 没有石粉层。");
+                if (mortars[i].bucket == null) warnings.Add("碓臼 " + i + " 没有木桶。");
+            }
+            if (game != null && game.sequence != null)
+            {
+                if (game.sequence.hammers == null || game.sequence.hammers.Length != 2)
+                    errors.Add("流程未连接两根碓杆。");
+                if (game.sequence.vatPowder == null)
+                    warnings.Add("流程未连接淘洗池石粉（07 交接物）。");
+            }
+
+            if (cam != null)
+            {
+                if (cam.fieldOfView < 55f || cam.fieldOfView > 60f)
+                    warnings.Add("相机 FOV = " + cam.fieldOfView + "，设定为 55–60°。");
+                if (cam.nearClipPlane > 0.06f)
+                    warnings.Add("近裁剪面偏大，近距离观察会切手/工具。");
+            }
+
+            // dimensions of the interior floor
+            Renderer[] renderers = Object.FindObjectsOfType<Renderer>();
+            int missingMat = 0;
+            int nullMesh = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i].sharedMaterial == null) missingMat++;
+                MeshFilter mf = renderers[i].GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh == null) nullMesh++;
+            }
+            if (missingMat > 0) errors.Add("有 " + missingMat + " 个渲染器缺少材质。");
+            if (nullMesh > 0) errors.Add("有 " + nullMesh + " 个 MeshFilter 没有网格。");
+
+            // every interactable needs a collider in its children for the probe
+            Interactable[] interactables = Object.FindObjectsOfType<Interactable>();
+            for (int i = 0; i < interactables.Length; i++)
+            {
+                Collider c = interactables[i].GetComponentInChildren<Collider>();
+                if (c == null) errors.Add("交互物 " + interactables[i].name + " 没有碰撞体，射线无法命中。");
+            }
+
+            EventSystem[] eventSystems = Object.FindObjectsOfType<EventSystem>();
+            if (eventSystems.Length != 1) warnings.Add("EventSystem 数量 = " + eventSystems.Length + "，应为 1。");
+
+            Text[] texts = Object.FindObjectsOfType<Text>();
+            int noFont = 0;
+            for (int i = 0; i < texts.Length; i++) if (texts[i].font == null) noFont++;
+            if (noFont > 0) errors.Add("有 " + noFont + " 个界面文字缺少字体。");
+
+            Light[] lights = Object.FindObjectsOfType<Light>();
+            int pointLights = 0;
+            for (int i = 0; i < lights.Length; i++) if (lights[i].type == LightType.Point) pointLights++;
+            if (pointLights > 5) warnings.Add("点光源数量 = " + pointLights + "，光比可能过碎。");
+
+            string report = "《瓷从泥生》· 06 舂石 · 场景校验\n\n" +
+                            "对象：" + renderers.Length + " 个渲染器 / " +
+                            interactables.Length + " 个交互物 / " + texts.Length + " 段文字\n" +
+                            "尺寸：12.6 × 7.2 m，檐高 4.2 m，视高 1.62 m\n\n" +
+                            (errors.Count == 0 ? "硬性问题：无\n" : "硬性问题：" + errors.Count + "\n· " +
+                             string.Join("\n· ", errors) + "\n") +
+                            (warnings.Count == 0 ? "\n提示：无" : "\n提示：" + warnings.Count + "\n· " +
+                             string.Join("\n· ", warnings));
+
+            if (errors.Count > 0) Debug.LogError("[Cishan] 校验失败\n" + report);
+            else Debug.Log("[Cishan] 校验通过\n" + report);
+            EditorUtility.DisplayDialog("舂石 · 场景校验",
+                errors.Count == 0 ? "通过。\n\n" + report : "有 " + errors.Count + " 个问题。\n\n" + report, "好");
+        }
+    }
+}
